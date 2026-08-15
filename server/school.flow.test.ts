@@ -7,7 +7,12 @@ import {
   homeworkItems,
   platformProfiles,
   subjects,
+  taskTheoryUnits,
   tasks,
+  theoryCurriculumUnits,
+  theoryExamTracks,
+  theoryTaskTypes,
+  theoryUnits,
   tutorStudentLinks,
   users,
 } from "../drizzle/schema";
@@ -23,15 +28,17 @@ function createContext(user: AuthenticatedUser | null): TrpcContext {
   };
 }
 
-function testUser(id: number, openId: string, email: string, name: string): AuthenticatedUser {
-  return { id, openId, email, name, loginMethod: "test", role: "user", createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
+function testUser(id: number, openId: string, email: string, name: string, role: AuthenticatedUser["role"] = "user"): AuthenticatedUser {
+  return { id, openId, email, name, loginMethod: "test", role, createdAt: new Date(), updatedAt: new Date(), lastSignedIn: new Date() };
 }
 
 describe("public bank and tutor homework flow", () => {
   const suffix = `flow-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   let tutorId: number | null = null;
   let studentId: number | null = null;
+  let adminId: number | null = null;
   let temporaryTaskIds: number[] = [];
+  let temporaryTheoryIds: number[] = [];
 
   afterEach(async () => {
     const db = await getDb();
@@ -46,10 +53,19 @@ describe("public bank and tutor homework flow", () => {
     if (tutorId && studentId) await db.delete(tutorStudentLinks).where(and(eq(tutorStudentLinks.tutorUserId, tutorId), eq(tutorStudentLinks.studentUserId, studentId)));
     if (tutorId) await db.delete(platformProfiles).where(eq(platformProfiles.userId, tutorId));
     if (studentId) await db.delete(platformProfiles).where(eq(platformProfiles.userId, studentId));
+    if (temporaryTheoryIds.length) {
+      await db.delete(taskTheoryUnits).where(inArray(taskTheoryUnits.theoryUnitId, temporaryTheoryIds));
+      await db.delete(theoryCurriculumUnits).where(inArray(theoryCurriculumUnits.theoryUnitId, temporaryTheoryIds));
+      await db.delete(theoryExamTracks).where(inArray(theoryExamTracks.theoryUnitId, temporaryTheoryIds));
+      await db.delete(theoryTaskTypes).where(inArray(theoryTaskTypes.theoryUnitId, temporaryTheoryIds));
+      await db.delete(theoryUnits).where(inArray(theoryUnits.id, temporaryTheoryIds));
+    }
     if (tutorId) await db.delete(users).where(eq(users.id, tutorId));
     if (studentId) await db.delete(users).where(eq(users.id, studentId));
+    if (adminId) await db.delete(users).where(eq(users.id, adminId));
     if (temporaryTaskIds.length) await db.delete(tasks).where(inArray(tasks.id, temporaryTaskIds));
     temporaryTaskIds = [];
+    temporaryTheoryIds = [];
   });
 
   it("returns the published prototype tasks to a visitor without authentication", async () => {
@@ -64,7 +80,7 @@ describe("public bank and tutor homework flow", () => {
       expect.objectContaining({ kind: "inline_svg", diagramKey: "triangle-angle-48-67" }),
     ]));
     const theory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
-    expect(theory).toHaveLength(13);
+    expect(theory).toHaveLength(19);
     expect(theory).toEqual(expect.arrayContaining([
       expect.objectContaining({ slug: "fractions-and-order" }),
       expect.objectContaining({ slug: "unit-conversion" }),
@@ -101,20 +117,21 @@ describe("public bank and tutor homework flow", () => {
     const units = await firstCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
     const theoryUnit = units[0];
     if (!theoryUnit) throw new Error("Theory unit unavailable");
+    const calculationsTheoryCount = units.filter(unit => unit.topicTitle === "Вычисления и проценты").length;
     await expect(appRouter.createCaller(createContext(null)).theory.progress()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     expect(await firstCaller.theory.toggleCompletion({ theoryUnitId: theoryUnit.id })).toEqual({ completed: true });
     const firstProgress = await firstCaller.theory.progress();
     expect(firstProgress.completedTheoryUnitIds).toContain(theoryUnit.id);
-    expect(firstProgress).toMatchObject({ total: 13, completed: 1 });
+    expect(firstProgress).toMatchObject({ total: units.length, completed: 1 });
     expect(firstProgress.byTopic).toEqual(expect.arrayContaining([
-      expect.objectContaining({ topicSlug: "calculations-percentages", total: 3, completed: 1 }),
+      expect.objectContaining({ topicSlug: "calculations-percentages", total: calculationsTheoryCount, completed: 1 }),
     ]));
     expect((await secondCaller.theory.progress()).completedTheoryUnitIds).not.toContain(theoryUnit.id);
     expect(await firstCaller.theory.toggleCompletion({ theoryUnitId: theoryUnit.id })).toEqual({ completed: false });
     const resetProgress = await firstCaller.theory.progress();
-    expect(resetProgress).toMatchObject({ total: 13, completed: 0 });
+    expect(resetProgress).toMatchObject({ total: units.length, completed: 0 });
     expect(resetProgress.byTopic).toEqual(expect.arrayContaining([
-      expect.objectContaining({ topicSlug: "calculations-percentages", total: 3, completed: 0 }),
+      expect.objectContaining({ topicSlug: "calculations-percentages", total: calculationsTheoryCount, completed: 0 }),
     ]));
   });
 
@@ -164,6 +181,21 @@ describe("public bank and tutor homework flow", () => {
     const studentCaller = appRouter.createCaller(createContext(testUser(studentId, openId, `${suffix}-role@student.example.test`, "Тестовый ученик")));
     await expect(studentCaller.school.tutor.students()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.tasks()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.theory()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.getTheory({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const blockedTheoryInput = {
+      title: "Несанкционированный конспект",
+      slug: `blocked-theory-${suffix}`,
+      lead: "Эта запись используется только для проверки разграничения административного доступа.",
+      bodyMarkdown: "## Правило\n\nСначала проверяется административная роль пользователя.\n\n## Алгоритм\n\n1. Войти.\n2. Проверить роль.\n3. Отклонить действие без прав.",
+      topicSlug: "equations",
+      kimNumber: "8",
+      relatedTaskIds: [],
+      sourceKind: "author" as const,
+      status: "draft" as const,
+    };
+    await expect(studentCaller.school.admin.createTheory(blockedTheoryInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.updateTheory({ ...blockedTheoryInput, theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.profile.chooseRole({ role: "tutor" })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -197,5 +229,44 @@ describe("public bank and tutor homework flow", () => {
       expect(listing.some(task => task.slug === slug)).toBe(false);
       await expect(publicCaller.publicBank.getTask({ slug })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
+  });
+
+  it("keeps theory drafts private and allows only an administrator to publish an editor-reviewed theory unit", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable for theory editor test");
+    const openId = `${suffix}-theory-admin`;
+    await db.insert(users).values({ openId, email: `${suffix}-theory-admin@example.test`, name: "Тестовый редактор", loginMethod: "test", role: "admin", lastSignedIn: new Date() });
+    const [created] = await db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1);
+    adminId = created?.id ?? null;
+    if (!adminId) throw new Error("Theory editor user was not created");
+    const anonymous = appRouter.createCaller(createContext(null));
+    await expect(anonymous.school.admin.theory()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const publicCaller = appRouter.createCaller(createContext(null));
+    const adminCaller = appRouter.createCaller(createContext(testUser(adminId, openId, `${suffix}-theory-admin@example.test`, "Тестовый редактор", "admin")));
+    const [options, publicTasks] = await Promise.all([adminCaller.school.admin.options(), publicCaller.publicBank.listTasks({})]);
+    const topicSlug = options.topics[0]?.slug;
+    const kimNumber = options.taskTypes[0]?.kimNumber;
+    const relatedTaskId = publicTasks[0]?.id;
+    if (!topicSlug || !kimNumber || !relatedTaskId) throw new Error("Theory editor options unavailable");
+    const slug = `editor-theory-${suffix}`;
+    const input = {
+      title: "Редакторский конспект по пропорциям",
+      slug,
+      lead: "Авторский материал для проверки жизненного цикла редакционного конспекта.",
+      bodyMarkdown: "## Правило\n\nСначала фиксируем отношение величин и только затем составляем пропорцию.\n\n## Алгоритм\n\n1. Выпишите данные.\n2. Составьте равенство отношений.\n3. Проверьте ответ.",
+      topicSlug,
+      kimNumber,
+      relatedTaskIds: [relatedTaskId],
+      sourceKind: "author" as const,
+      status: "draft" as const,
+    };
+    const createdTheory = await adminCaller.school.admin.createTheory(input);
+    temporaryTheoryIds.push(createdTheory.theoryUnitId);
+    expect((await publicCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" })).some(item => item.slug === slug)).toBe(false);
+    await adminCaller.school.admin.updateTheory({ ...input, theoryUnitId: createdTheory.theoryUnitId, status: "published" });
+    const published = await publicCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
+    expect(published).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug, sourceKind: "author", relatedTasks: expect.arrayContaining([expect.objectContaining({ id: relatedTaskId })]) }),
+    ]));
   });
 });

@@ -174,6 +174,12 @@ export const theoryUnits = mysqlTable(
     title: varchar("title", { length: 220 }).notNull(),
     lead: text("lead").notNull(),
     bodyMarkdown: text("bodyMarkdown").notNull(),
+    sourceKind: mysqlEnum("sourceKind", ["author", "licensed", "external_reference"])
+      .default("author")
+      .notNull(),
+    sourceTitle: varchar("sourceTitle", { length: 255 }),
+    sourceUrl: varchar("sourceUrl", { length: 1024 }),
+    contentVersion: int("contentVersion").default(1).notNull(),
     status: mysqlEnum("status", ["draft", "review", "published", "archived"])
       .default("draft")
       .notNull(),

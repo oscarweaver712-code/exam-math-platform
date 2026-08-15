@@ -1,0 +1,2437 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "0f14b3b2-7847-4b6f-a8e5-89c7f7767e4d",
+  "prevId": "99a0e683-7312-4b97-af4d-b22a40b6ef55",
+  "tables": {
+    "curriculum_units": {
+      "name": "curriculum_units",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parentId": {
+          "name": "parentId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "curriculum_units_subject_slug_unique": {
+          "name": "curriculum_units_subject_slug_unique",
+          "columns": [
+            "subjectId",
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "curriculum_units_subject_parent_idx": {
+          "name": "curriculum_units_subject_parent_idx",
+          "columns": [
+            "subjectId",
+            "parentId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "curriculum_units_subjectId_subjects_id_fk": {
+          "name": "curriculum_units_subjectId_subjects_id_fk",
+          "tableFrom": "curriculum_units",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "curriculum_units_id": {
+          "name": "curriculum_units_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "exam_task_types": {
+      "name": "exam_task_types",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "examTrackId": {
+          "name": "examTrackId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kimNumber": {
+          "name": "kimNumber",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(180)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "part": {
+          "name": "part",
+          "type": "enum('part1','part2')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "exam_task_types_track_kim_unique": {
+          "name": "exam_task_types_track_kim_unique",
+          "columns": [
+            "examTrackId",
+            "kimNumber"
+          ],
+          "isUnique": true
+        },
+        "exam_task_types_track_part_idx": {
+          "name": "exam_task_types_track_part_idx",
+          "columns": [
+            "examTrackId",
+            "part"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "exam_task_types_examTrackId_exam_tracks_id_fk": {
+          "name": "exam_task_types_examTrackId_exam_tracks_id_fk",
+          "tableFrom": "exam_task_types",
+          "tableTo": "exam_tracks",
+          "columnsFrom": [
+            "examTrackId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "exam_task_types_id": {
+          "name": "exam_task_types_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "exam_track_curriculum_units": {
+      "name": "exam_track_curriculum_units",
+      "columns": {
+        "examTrackId": {
+          "name": "examTrackId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "curriculumUnitId": {
+          "name": "curriculumUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "track_curriculum_unit_idx": {
+          "name": "track_curriculum_unit_idx",
+          "columns": [
+            "curriculumUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "exam_track_curriculum_units_examTrackId_exam_tracks_id_fk": {
+          "name": "exam_track_curriculum_units_examTrackId_exam_tracks_id_fk",
+          "tableFrom": "exam_track_curriculum_units",
+          "tableTo": "exam_tracks",
+          "columnsFrom": [
+            "examTrackId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "etcu_curriculum_fk": {
+          "name": "etcu_curriculum_fk",
+          "tableFrom": "exam_track_curriculum_units",
+          "tableTo": "curriculum_units",
+          "columnsFrom": [
+            "curriculumUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "exam_track_curriculum_units_examTrackId_curriculumUnitId_pk": {
+          "name": "exam_track_curriculum_units_examTrackId_curriculumUnitId_pk",
+          "columns": [
+            "examTrackId",
+            "curriculumUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "exam_tracks": {
+      "name": "exam_tracks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "examKind": {
+          "name": "examKind",
+          "type": "enum('oge','ege','other')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isPrototype": {
+          "name": "isPrototype",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "exam_tracks_subject_slug_unique": {
+          "name": "exam_tracks_subject_slug_unique",
+          "columns": [
+            "subjectId",
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "exam_tracks_subject_idx": {
+          "name": "exam_tracks_subject_idx",
+          "columns": [
+            "subjectId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "exam_tracks_subjectId_subjects_id_fk": {
+          "name": "exam_tracks_subjectId_subjects_id_fk",
+          "tableFrom": "exam_tracks",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "exam_tracks_id": {
+          "name": "exam_tracks_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "homework_assignments": {
+      "name": "homework_assignments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "tutorUserId": {
+          "name": "tutorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "studentUserId": {
+          "name": "studentUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(220)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "dueAt": {
+          "name": "dueAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','assigned','closed','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "homework_student_status_due_idx": {
+          "name": "homework_student_status_due_idx",
+          "columns": [
+            "studentUserId",
+            "status",
+            "dueAt"
+          ],
+          "isUnique": false
+        },
+        "homework_tutor_status_idx": {
+          "name": "homework_tutor_status_idx",
+          "columns": [
+            "tutorUserId",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "homework_assignments_tutorUserId_users_id_fk": {
+          "name": "homework_assignments_tutorUserId_users_id_fk",
+          "tableFrom": "homework_assignments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "tutorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "homework_assignments_studentUserId_users_id_fk": {
+          "name": "homework_assignments_studentUserId_users_id_fk",
+          "tableFrom": "homework_assignments",
+          "tableTo": "users",
+          "columnsFrom": [
+            "studentUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "homework_assignments_subjectId_subjects_id_fk": {
+          "name": "homework_assignments_subjectId_subjects_id_fk",
+          "tableFrom": "homework_assignments",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "homework_assignments_id": {
+          "name": "homework_assignments_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "homework_items": {
+      "name": "homework_items",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "homeworkAssignmentId": {
+          "name": "homeworkAssignmentId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taskContentVersion": {
+          "name": "taskContentVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "homework_items_assignment_task_unique": {
+          "name": "homework_items_assignment_task_unique",
+          "columns": [
+            "homeworkAssignmentId",
+            "taskId"
+          ],
+          "isUnique": true
+        },
+        "homework_items_task_idx": {
+          "name": "homework_items_task_idx",
+          "columns": [
+            "taskId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "homework_items_homeworkAssignmentId_homework_assignments_id_fk": {
+          "name": "homework_items_homeworkAssignmentId_homework_assignments_id_fk",
+          "tableFrom": "homework_items",
+          "tableTo": "homework_assignments",
+          "columnsFrom": [
+            "homeworkAssignmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "homework_items_taskId_tasks_id_fk": {
+          "name": "homework_items_taskId_tasks_id_fk",
+          "tableFrom": "homework_items",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "homework_items_id": {
+          "name": "homework_items_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "platform_profiles": {
+      "name": "platform_profiles",
+      "columns": {
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "learningRole": {
+          "name": "learningRole",
+          "type": "enum('unselected','student','tutor')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'unselected'"
+        },
+        "displayName": {
+          "name": "displayName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "roleChosenAt": {
+          "name": "roleChosenAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "platform_profiles_userId_users_id_fk": {
+          "name": "platform_profiles_userId_users_id_fk",
+          "tableFrom": "platform_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "platform_profiles_userId": {
+          "name": "platform_profiles_userId",
+          "columns": [
+            "userId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "saved_tasks": {
+      "name": "saved_tasks",
+      "columns": {
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "saved_tasks_task_idx": {
+          "name": "saved_tasks_task_idx",
+          "columns": [
+            "taskId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "saved_tasks_userId_users_id_fk": {
+          "name": "saved_tasks_userId_users_id_fk",
+          "tableFrom": "saved_tasks",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "saved_tasks_taskId_tasks_id_fk": {
+          "name": "saved_tasks_taskId_tasks_id_fk",
+          "tableFrom": "saved_tasks",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "saved_tasks_userId_taskId_pk": {
+          "name": "saved_tasks_userId_taskId_pk",
+          "columns": [
+            "userId",
+            "taskId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "subjects": {
+      "name": "subjects",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "shortTitle": {
+          "name": "shortTitle",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "subjects_slug_unique": {
+          "name": "subjects_slug_unique",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "subjects_id": {
+          "name": "subjects_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "task_attempts": {
+      "name": "task_attempts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "homeworkItemId": {
+          "name": "homeworkItemId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rawAnswer": {
+          "name": "rawAnswer",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalizedAnswer": {
+          "name": "normalizedAnswer",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "checkStatus": {
+          "name": "checkStatus",
+          "type": "enum('correct','incorrect','awaiting_review','reviewed')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isCorrect": {
+          "name": "isCorrect",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "feedback": {
+          "name": "feedback",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewedByUserId": {
+          "name": "reviewedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "submittedAt": {
+          "name": "submittedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reviewedAt": {
+          "name": "reviewedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "task_attempts_user_task_submitted_idx": {
+          "name": "task_attempts_user_task_submitted_idx",
+          "columns": [
+            "userId",
+            "taskId",
+            "submittedAt"
+          ],
+          "isUnique": false
+        },
+        "task_attempts_homework_item_idx": {
+          "name": "task_attempts_homework_item_idx",
+          "columns": [
+            "homeworkItemId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "task_attempts_userId_users_id_fk": {
+          "name": "task_attempts_userId_users_id_fk",
+          "tableFrom": "task_attempts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "task_attempts_taskId_tasks_id_fk": {
+          "name": "task_attempts_taskId_tasks_id_fk",
+          "tableFrom": "task_attempts",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "task_attempts_homeworkItemId_homework_items_id_fk": {
+          "name": "task_attempts_homeworkItemId_homework_items_id_fk",
+          "tableFrom": "task_attempts",
+          "tableTo": "homework_items",
+          "columnsFrom": [
+            "homeworkItemId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "task_attempts_reviewedByUserId_users_id_fk": {
+          "name": "task_attempts_reviewedByUserId_users_id_fk",
+          "tableFrom": "task_attempts",
+          "tableTo": "users",
+          "columnsFrom": [
+            "reviewedByUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_attempts_id": {
+          "name": "task_attempts_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "task_curriculum_units": {
+      "name": "task_curriculum_units",
+      "columns": {
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "curriculumUnitId": {
+          "name": "curriculumUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "task_curriculum_units_unit_idx": {
+          "name": "task_curriculum_units_unit_idx",
+          "columns": [
+            "curriculumUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "task_curriculum_units_taskId_tasks_id_fk": {
+          "name": "task_curriculum_units_taskId_tasks_id_fk",
+          "tableFrom": "task_curriculum_units",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tcu_curriculum_fk": {
+          "name": "tcu_curriculum_fk",
+          "tableFrom": "task_curriculum_units",
+          "tableTo": "curriculum_units",
+          "columnsFrom": [
+            "curriculumUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_curriculum_units_taskId_curriculumUnitId_pk": {
+          "name": "task_curriculum_units_taskId_curriculumUnitId_pk",
+          "columns": [
+            "taskId",
+            "curriculumUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "task_theory_units": {
+      "name": "task_theory_units",
+      "columns": {
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "theoryUnitId": {
+          "name": "theoryUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "task_theory_units_theory_idx": {
+          "name": "task_theory_units_theory_idx",
+          "columns": [
+            "theoryUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "task_theory_units_taskId_tasks_id_fk": {
+          "name": "task_theory_units_taskId_tasks_id_fk",
+          "tableFrom": "task_theory_units",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "task_theory_units_theoryUnitId_theory_units_id_fk": {
+          "name": "task_theory_units_theoryUnitId_theory_units_id_fk",
+          "tableFrom": "task_theory_units",
+          "tableTo": "theory_units",
+          "columnsFrom": [
+            "theoryUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_theory_units_taskId_theoryUnitId_pk": {
+          "name": "task_theory_units_taskId_theoryUnitId_pk",
+          "columns": [
+            "taskId",
+            "theoryUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "task_type_curriculum_units": {
+      "name": "task_type_curriculum_units",
+      "columns": {
+        "examTaskTypeId": {
+          "name": "examTaskTypeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "curriculumUnitId": {
+          "name": "curriculumUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "task_type_curriculum_unit_idx": {
+          "name": "task_type_curriculum_unit_idx",
+          "columns": [
+            "curriculumUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "task_type_curriculum_units_examTaskTypeId_exam_task_types_id_fk": {
+          "name": "task_type_curriculum_units_examTaskTypeId_exam_task_types_id_fk",
+          "tableFrom": "task_type_curriculum_units",
+          "tableTo": "exam_task_types",
+          "columnsFrom": [
+            "examTaskTypeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ttcu_curriculum_fk": {
+          "name": "ttcu_curriculum_fk",
+          "tableFrom": "task_type_curriculum_units",
+          "tableTo": "curriculum_units",
+          "columnsFrom": [
+            "curriculumUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_type_curriculum_units_examTaskTypeId_curriculumUnitId_pk": {
+          "name": "task_type_curriculum_units_examTaskTypeId_curriculumUnitId_pk",
+          "columns": [
+            "examTaskTypeId",
+            "curriculumUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "task_visuals": {
+      "name": "task_visuals",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "taskId": {
+          "name": "taskId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "enum('inline_svg','image_asset')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "placement": {
+          "name": "placement",
+          "type": "enum('statement','solution')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'statement'"
+        },
+        "diagramKey": {
+          "name": "diagramKey",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "assetUrl": {
+          "name": "assetUrl",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "altText": {
+          "name": "altText",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sourceKind": {
+          "name": "sourceKind",
+          "type": "enum('author','external')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'author'"
+        },
+        "sourceUrl": {
+          "name": "sourceUrl",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reviewStatus": {
+          "name": "reviewStatus",
+          "type": "enum('draft','review','approved','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "task_visuals_task_placement_idx": {
+          "name": "task_visuals_task_placement_idx",
+          "columns": [
+            "taskId",
+            "placement",
+            "sortOrder"
+          ],
+          "isUnique": false
+        },
+        "task_visuals_review_idx": {
+          "name": "task_visuals_review_idx",
+          "columns": [
+            "reviewStatus"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "task_visuals_taskId_tasks_id_fk": {
+          "name": "task_visuals_taskId_tasks_id_fk",
+          "tableFrom": "task_visuals",
+          "tableTo": "tasks",
+          "columnsFrom": [
+            "taskId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "task_visuals_id": {
+          "name": "task_visuals_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "tasks": {
+      "name": "tasks",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "examTrackId": {
+          "name": "examTrackId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "examTaskTypeId": {
+          "name": "examTaskTypeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(220)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "statementMarkdown": {
+          "name": "statementMarkdown",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "answerChoices": {
+          "name": "answerChoices",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "answerKind": {
+          "name": "answerKind",
+          "type": "enum('short_integer','short_decimal','short_text','manual')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "correctAnswer": {
+          "name": "correctAnswer",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "acceptableAnswers": {
+          "name": "acceptableAnswers",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "solutionMarkdown": {
+          "name": "solutionMarkdown",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "difficulty": {
+          "name": "difficulty",
+          "type": "enum('basic','standard','advanced')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'standard'"
+        },
+        "sourceKind": {
+          "name": "sourceKind",
+          "type": "enum('author','fipi','partner')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'author'"
+        },
+        "sourceUrl": {
+          "name": "sourceUrl",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sourceRecordId": {
+          "name": "sourceRecordId",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contentVersion": {
+          "name": "contentVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','review','published','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tasks_track_slug_unique": {
+          "name": "tasks_track_slug_unique",
+          "columns": [
+            "examTrackId",
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "tasks_public_catalog_idx": {
+          "name": "tasks_public_catalog_idx",
+          "columns": [
+            "examTrackId",
+            "status",
+            "difficulty"
+          ],
+          "isUnique": false
+        },
+        "tasks_task_type_idx": {
+          "name": "tasks_task_type_idx",
+          "columns": [
+            "examTaskTypeId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tasks_subjectId_subjects_id_fk": {
+          "name": "tasks_subjectId_subjects_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "tasks_examTrackId_exam_tracks_id_fk": {
+          "name": "tasks_examTrackId_exam_tracks_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "exam_tracks",
+          "columnsFrom": [
+            "examTrackId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "tasks_examTaskTypeId_exam_task_types_id_fk": {
+          "name": "tasks_examTaskTypeId_exam_task_types_id_fk",
+          "tableFrom": "tasks",
+          "tableTo": "exam_task_types",
+          "columnsFrom": [
+            "examTaskTypeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tasks_id": {
+          "name": "tasks_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "theory_curriculum_units": {
+      "name": "theory_curriculum_units",
+      "columns": {
+        "theoryUnitId": {
+          "name": "theoryUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "curriculumUnitId": {
+          "name": "curriculumUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "theory_curriculum_units_unit_idx": {
+          "name": "theory_curriculum_units_unit_idx",
+          "columns": [
+            "curriculumUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "theory_curriculum_units_theoryUnitId_theory_units_id_fk": {
+          "name": "theory_curriculum_units_theoryUnitId_theory_units_id_fk",
+          "tableFrom": "theory_curriculum_units",
+          "tableTo": "theory_units",
+          "columnsFrom": [
+            "theoryUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "thcu_curriculum_fk": {
+          "name": "thcu_curriculum_fk",
+          "tableFrom": "theory_curriculum_units",
+          "tableTo": "curriculum_units",
+          "columnsFrom": [
+            "curriculumUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "theory_curriculum_units_theoryUnitId_curriculumUnitId_pk": {
+          "name": "theory_curriculum_units_theoryUnitId_curriculumUnitId_pk",
+          "columns": [
+            "theoryUnitId",
+            "curriculumUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "theory_exam_tracks": {
+      "name": "theory_exam_tracks",
+      "columns": {
+        "theoryUnitId": {
+          "name": "theoryUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "examTrackId": {
+          "name": "examTrackId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "theory_exam_tracks_track_idx": {
+          "name": "theory_exam_tracks_track_idx",
+          "columns": [
+            "examTrackId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "theory_exam_tracks_theoryUnitId_theory_units_id_fk": {
+          "name": "theory_exam_tracks_theoryUnitId_theory_units_id_fk",
+          "tableFrom": "theory_exam_tracks",
+          "tableTo": "theory_units",
+          "columnsFrom": [
+            "theoryUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "theory_exam_tracks_examTrackId_exam_tracks_id_fk": {
+          "name": "theory_exam_tracks_examTrackId_exam_tracks_id_fk",
+          "tableFrom": "theory_exam_tracks",
+          "tableTo": "exam_tracks",
+          "columnsFrom": [
+            "examTrackId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "theory_exam_tracks_theoryUnitId_examTrackId_pk": {
+          "name": "theory_exam_tracks_theoryUnitId_examTrackId_pk",
+          "columns": [
+            "theoryUnitId",
+            "examTrackId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "theory_task_types": {
+      "name": "theory_task_types",
+      "columns": {
+        "theoryUnitId": {
+          "name": "theoryUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "examTaskTypeId": {
+          "name": "examTaskTypeId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "theory_task_types_task_type_idx": {
+          "name": "theory_task_types_task_type_idx",
+          "columns": [
+            "examTaskTypeId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "theory_task_types_theoryUnitId_theory_units_id_fk": {
+          "name": "theory_task_types_theoryUnitId_theory_units_id_fk",
+          "tableFrom": "theory_task_types",
+          "tableTo": "theory_units",
+          "columnsFrom": [
+            "theoryUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "theory_task_types_examTaskTypeId_exam_task_types_id_fk": {
+          "name": "theory_task_types_examTaskTypeId_exam_task_types_id_fk",
+          "tableFrom": "theory_task_types",
+          "tableTo": "exam_task_types",
+          "columnsFrom": [
+            "examTaskTypeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "theory_task_types_theoryUnitId_examTaskTypeId_pk": {
+          "name": "theory_task_types_theoryUnitId_examTaskTypeId_pk",
+          "columns": [
+            "theoryUnitId",
+            "examTaskTypeId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "theory_units": {
+      "name": "theory_units",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(140)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(220)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lead": {
+          "name": "lead",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bodyMarkdown": {
+          "name": "bodyMarkdown",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceKind": {
+          "name": "sourceKind",
+          "type": "enum('author','licensed','external_reference')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'author'"
+        },
+        "sourceTitle": {
+          "name": "sourceTitle",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sourceUrl": {
+          "name": "sourceUrl",
+          "type": "varchar(1024)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contentVersion": {
+          "name": "contentVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','review','published','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "theory_units_subject_slug_unique": {
+          "name": "theory_units_subject_slug_unique",
+          "columns": [
+            "subjectId",
+            "slug"
+          ],
+          "isUnique": true
+        },
+        "theory_units_subject_status_idx": {
+          "name": "theory_units_subject_status_idx",
+          "columns": [
+            "subjectId",
+            "status"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "theory_units_subjectId_subjects_id_fk": {
+          "name": "theory_units_subjectId_subjects_id_fk",
+          "tableFrom": "theory_units",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "theory_units_id": {
+          "name": "theory_units_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "tutor_student_links": {
+      "name": "tutor_student_links",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "tutorUserId": {
+          "name": "tutorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "studentUserId": {
+          "name": "studentUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "inviteCode": {
+          "name": "inviteCode",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','active','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tutor_student_invite_code_unique": {
+          "name": "tutor_student_invite_code_unique",
+          "columns": [
+            "inviteCode"
+          ],
+          "isUnique": true
+        },
+        "tutor_student_subject_unique": {
+          "name": "tutor_student_subject_unique",
+          "columns": [
+            "tutorUserId",
+            "studentUserId",
+            "subjectId"
+          ],
+          "isUnique": true
+        },
+        "tutor_student_student_subject_idx": {
+          "name": "tutor_student_student_subject_idx",
+          "columns": [
+            "studentUserId",
+            "subjectId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tutor_student_links_tutorUserId_users_id_fk": {
+          "name": "tutor_student_links_tutorUserId_users_id_fk",
+          "tableFrom": "tutor_student_links",
+          "tableTo": "users",
+          "columnsFrom": [
+            "tutorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tutor_student_links_studentUserId_users_id_fk": {
+          "name": "tutor_student_links_studentUserId_users_id_fk",
+          "tableFrom": "tutor_student_links",
+          "tableTo": "users",
+          "columnsFrom": [
+            "studentUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tutor_student_links_subjectId_subjects_id_fk": {
+          "name": "tutor_student_links_subjectId_subjects_id_fk",
+          "tableFrom": "tutor_student_links",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tutor_student_links_id": {
+          "name": "tutor_student_links_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "tutor_subject_specialties": {
+      "name": "tutor_subject_specialties",
+      "columns": {
+        "tutorUserId": {
+          "name": "tutorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "subjectId": {
+          "name": "subjectId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "tutor_specialties_subject_idx": {
+          "name": "tutor_specialties_subject_idx",
+          "columns": [
+            "subjectId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "tutor_subject_specialties_tutorUserId_users_id_fk": {
+          "name": "tutor_subject_specialties_tutorUserId_users_id_fk",
+          "tableFrom": "tutor_subject_specialties",
+          "tableTo": "users",
+          "columnsFrom": [
+            "tutorUserId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "tutor_subject_specialties_subjectId_subjects_id_fk": {
+          "name": "tutor_subject_specialties_subjectId_subjects_id_fk",
+          "tableFrom": "tutor_subject_specialties",
+          "tableTo": "subjects",
+          "columnsFrom": [
+            "subjectId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "tutor_subject_specialties_tutorUserId_subjectId_pk": {
+          "name": "tutor_subject_specialties_tutorUserId_subjectId_pk",
+          "columns": [
+            "tutorUserId",
+            "subjectId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "user_theory_progress": {
+      "name": "user_theory_progress",
+      "columns": {
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "theoryUnitId": {
+          "name": "theoryUnitId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completedAt": {
+          "name": "completedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "user_theory_progress_theory_idx": {
+          "name": "user_theory_progress_theory_idx",
+          "columns": [
+            "theoryUnitId"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "user_theory_progress_userId_users_id_fk": {
+          "name": "user_theory_progress_userId_users_id_fk",
+          "tableFrom": "user_theory_progress",
+          "tableTo": "users",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "user_theory_progress_theoryUnitId_theory_units_id_fk": {
+          "name": "user_theory_progress_theoryUnitId_theory_units_id_fk",
+          "tableFrom": "user_theory_progress",
+          "tableTo": "theory_units",
+          "columnsFrom": [
+            "theoryUnitId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "user_theory_progress_userId_theoryUnitId_pk": {
+          "name": "user_theory_progress_userId_theoryUnitId_pk",
+          "columns": [
+            "userId",
+            "theoryUnitId"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "openId": {
+          "name": "openId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "loginMethod": {
+          "name": "loginMethod",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('user','admin')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'user'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        },
+        "lastSignedIn": {
+          "name": "lastSignedIn",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "users_id": {
+          "name": "users_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {
+        "users_openId_unique": {
+          "name": "users_openId_unique",
+          "columns": [
+            "openId"
+          ]
+        }
+      },
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

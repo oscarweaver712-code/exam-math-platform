@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -11,7 +11,12 @@ import {
   platformProfiles,
   subjects,
   taskCurriculumUnits,
+  taskTheoryUnits,
   tasks,
+  theoryCurriculumUnits,
+  theoryExamTracks,
+  theoryTaskTypes,
+  theoryUnits,
   tutorStudentLinks,
   tutorSubjectSpecialties,
   users,
@@ -60,6 +65,20 @@ const adminTaskInput = z.object({
   answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]),
   correctAnswer: z.string().max(1024).optional(),
   status: z.enum(["draft", "review", "published"]).default("draft"),
+});
+
+const adminTheoryInput = z.object({
+  title: z.string().min(4).max(220),
+  slug: z.string().regex(/^[a-z0-9-]+$/),
+  lead: z.string().min(10).max(1000),
+  bodyMarkdown: z.string().min(80).max(20_000),
+  topicSlug: z.string(),
+  kimNumber: z.string(),
+  relatedTaskIds: z.array(z.number().int().positive()).max(24).default([]),
+  sourceKind: z.enum(["author", "licensed", "external_reference"]).default("author"),
+  sourceTitle: z.string().trim().max(255).optional(),
+  sourceUrl: z.string().url().max(1024).optional(),
+  status: z.enum(["draft", "review", "published", "archived"]).default("draft"),
 });
 
 export const schoolRouter = router({
@@ -259,5 +278,107 @@ export const schoolRouter = router({
         await db.insert(taskCurriculumUnits).values({ taskId: input.taskId, curriculumUnitId: topic[0].id });
         return { taskId: input.taskId };
       }),
+    theory: adminProcedure.query(async () => {
+      const { db, trackId } = await getMathTrack();
+      return db
+        .select({
+          id: theoryUnits.id,
+          title: theoryUnits.title,
+          slug: theoryUnits.slug,
+          status: theoryUnits.status,
+          updatedAt: theoryUnits.updatedAt,
+          sourceKind: theoryUnits.sourceKind,
+          sourceTitle: theoryUnits.sourceTitle,
+          topicSlug: curriculumUnits.slug,
+          topicTitle: curriculumUnits.title,
+          kimNumber: examTaskTypes.kimNumber,
+        })
+        .from(theoryExamTracks)
+        .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
+        .innerJoin(theoryCurriculumUnits, eq(theoryUnits.id, theoryCurriculumUnits.theoryUnitId))
+        .innerJoin(curriculumUnits, eq(theoryCurriculumUnits.curriculumUnitId, curriculumUnits.id))
+        .innerJoin(theoryTaskTypes, eq(theoryUnits.id, theoryTaskTypes.theoryUnitId))
+        .innerJoin(examTaskTypes, eq(theoryTaskTypes.examTaskTypeId, examTaskTypes.id))
+        .where(eq(theoryExamTracks.examTrackId, trackId))
+        .orderBy(desc(theoryUnits.updatedAt));
+    }),
+    getTheory: adminProcedure.input(z.object({ theoryUnitId: z.number().int().positive() })).query(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [unit] = await db
+        .select({
+          id: theoryUnits.id,
+          title: theoryUnits.title,
+          slug: theoryUnits.slug,
+          lead: theoryUnits.lead,
+          bodyMarkdown: theoryUnits.bodyMarkdown,
+          status: theoryUnits.status,
+          sourceKind: theoryUnits.sourceKind,
+          sourceTitle: theoryUnits.sourceTitle,
+          sourceUrl: theoryUnits.sourceUrl,
+          topicSlug: curriculumUnits.slug,
+          kimNumber: examTaskTypes.kimNumber,
+        })
+        .from(theoryExamTracks)
+        .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
+        .innerJoin(theoryCurriculumUnits, eq(theoryUnits.id, theoryCurriculumUnits.theoryUnitId))
+        .innerJoin(curriculumUnits, eq(theoryCurriculumUnits.curriculumUnitId, curriculumUnits.id))
+        .innerJoin(theoryTaskTypes, eq(theoryUnits.id, theoryTaskTypes.theoryUnitId))
+        .innerJoin(examTaskTypes, eq(theoryTaskTypes.examTaskTypeId, examTaskTypes.id))
+        .where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId)))
+        .limit(1);
+      if (!unit) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      const relatedTasks = await db
+        .select({ id: tasks.id, title: tasks.title, slug: tasks.slug })
+        .from(taskTheoryUnits)
+        .innerJoin(tasks, eq(taskTheoryUnits.taskId, tasks.id))
+        .where(and(eq(taskTheoryUnits.theoryUnitId, unit.id), eq(tasks.examTrackId, trackId)));
+      return { ...unit, relatedTaskIds: relatedTasks.map(task => task.id), relatedTasks };
+    }),
+    createTheory: adminProcedure.input(adminTheoryInput).mutation(async ({ input }) => {
+      const { db, trackId, subjectId } = await getMathTrack();
+      const [topic, taskType, linkedTasks, lastTheory] = await Promise.all([
+        db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, input.topicSlug))).limit(1),
+        db.select({ id: examTaskTypes.id }).from(examTaskTypes).where(and(eq(examTaskTypes.examTrackId, trackId), eq(examTaskTypes.kimNumber, input.kimNumber))).limit(1),
+        input.relatedTaskIds.length
+          ? db.select({ id: tasks.id }).from(tasks).where(and(inArray(tasks.id, input.relatedTaskIds), eq(tasks.examTrackId, trackId)))
+          : Promise.resolve([]),
+        db.select({ sortOrder: theoryUnits.sortOrder }).from(theoryUnits).where(eq(theoryUnits.subjectId, subjectId)).orderBy(desc(theoryUnits.sortOrder)).limit(1),
+      ]);
+      if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Неверная тема или номер КИМ." });
+      if (linkedTasks.length !== input.relatedTaskIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Одна или несколько связанных задач недоступны." });
+      if (input.sourceKind !== "author" && (!input.sourceTitle || !input.sourceUrl)) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего или лицензированного материала укажите источник и ссылку." });
+      const timestamp = Date.now();
+      const inserted = await db.insert(theoryUnits).values({ subjectId, slug: input.slug, title: input.title.trim(), lead: input.lead.trim(), bodyMarkdown: input.bodyMarkdown.trim(), sourceKind: input.sourceKind, sourceTitle: input.sourceKind === "author" ? "Авторский материал Школы 911" : input.sourceTitle?.trim() || null, sourceUrl: input.sourceKind === "author" ? null : input.sourceUrl?.trim() || null, contentVersion: 1, status: input.status, sortOrder: (lastTheory[0]?.sortOrder ?? 0) + 1, createdAt: timestamp, updatedAt: timestamp, publishedAt: input.status === "published" ? timestamp : null });
+      const theoryUnitId = Number(inserted[0].insertId);
+      await db.insert(theoryExamTracks).values({ theoryUnitId, examTrackId: trackId });
+      await db.insert(theoryCurriculumUnits).values({ theoryUnitId, curriculumUnitId: topic[0].id });
+      await db.insert(theoryTaskTypes).values({ theoryUnitId, examTaskTypeId: taskType[0].id });
+      if (input.relatedTaskIds.length) await db.insert(taskTheoryUnits).values(input.relatedTaskIds.map(taskId => ({ taskId, theoryUnitId })));
+      return { theoryUnitId };
+    }),
+    updateTheory: adminProcedure.input(adminTheoryInput.extend({ theoryUnitId: z.number().int().positive() })).mutation(async ({ input }) => {
+      const { db, trackId, subjectId } = await getMathTrack();
+      const [existing, topic, taskType, linkedTasks] = await Promise.all([
+        db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1),
+        db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, input.topicSlug))).limit(1),
+        db.select({ id: examTaskTypes.id }).from(examTaskTypes).where(and(eq(examTaskTypes.examTrackId, trackId), eq(examTaskTypes.kimNumber, input.kimNumber))).limit(1),
+        input.relatedTaskIds.length
+          ? db.select({ id: tasks.id }).from(tasks).where(and(inArray(tasks.id, input.relatedTaskIds), eq(tasks.examTrackId, trackId)))
+          : Promise.resolve([]),
+      ]);
+      if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Неверная тема или номер КИМ." });
+      if (linkedTasks.length !== input.relatedTaskIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Одна или несколько связанных задач недоступны." });
+      if (input.sourceKind !== "author" && (!input.sourceTitle || !input.sourceUrl)) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего или лицензированного материала укажите источник и ссылку." });
+      const timestamp = Date.now();
+      await db.update(theoryUnits).set({ slug: input.slug, title: input.title.trim(), lead: input.lead.trim(), bodyMarkdown: input.bodyMarkdown.trim(), sourceKind: input.sourceKind, sourceTitle: input.sourceKind === "author" ? "Авторский материал Школы 911" : input.sourceTitle?.trim() || null, sourceUrl: input.sourceKind === "author" ? null : input.sourceUrl?.trim() || null, contentVersion: sql`${theoryUnits.contentVersion} + 1`, status: input.status, publishedAt: input.status === "published" ? timestamp : null, updatedAt: timestamp }).where(eq(theoryUnits.id, input.theoryUnitId));
+      await db.delete(theoryCurriculumUnits).where(eq(theoryCurriculumUnits.theoryUnitId, input.theoryUnitId));
+      await db.delete(theoryTaskTypes).where(eq(theoryTaskTypes.theoryUnitId, input.theoryUnitId));
+      await db.delete(taskTheoryUnits).where(eq(taskTheoryUnits.theoryUnitId, input.theoryUnitId));
+      await db.insert(theoryCurriculumUnits).values({ theoryUnitId: input.theoryUnitId, curriculumUnitId: topic[0].id });
+      await db.insert(theoryTaskTypes).values({ theoryUnitId: input.theoryUnitId, examTaskTypeId: taskType[0].id });
+      if (input.relatedTaskIds.length) await db.insert(taskTheoryUnits).values(input.relatedTaskIds.map(taskId => ({ taskId, theoryUnitId: input.theoryUnitId })));
+      return { theoryUnitId: input.theoryUnitId };
+    }),
   }),
 });

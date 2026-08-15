@@ -65,3 +65,15 @@
 - [x] Verify mobile light/dark rendering for personal, tutor, and administrator workspaces.
 - [x] Replace remaining hardcoded dark surfaces on key role screens with reusable theme-aware surface and typography tokens.
 - [x] Save a new checkpoint after the verified theory and theme work.
+- [x] Audit the existing theory and task content model, including publication status and the lawful FIPI-derived content intake policy.
+- [x] Build an administrator-only visual editor for creating, editing, reviewing, publishing, and archiving theory units.
+- [x] Add clear structured controls for title, topic, KIM number, lead, rule, formula, algorithm, common mistakes, and related practice tasks.
+- [x] Expand the prototype with editor-reviewed, original OГЭ-aligned learning materials and representative training tasks; do not reproduce protected FIPI bank content without verified rights.
+- [x] Add Vitest coverage for theory-editor role gating, draft visibility, create/update flow, and public publication behaviour.
+- [x] Verify the theory editor and expanded public learning flow on desktop and mobile, then save a checkpoint.
+- [x] Analyze the supplied public reference for reusable interaction principles without copying its design, code, or protected content.
+- [x] Add a transparent editorial-origin label to theory and task content that distinguishes author-created, licensed, and externally referenced materials.
+- [ ] Design a restrained in-product promotion block for the school’s own live lessons or streams, controllable by editors and never obscuring learning content.
+- [x] Define a multi-subject, multi-exam content workflow that keeps source registration, editorial review, publication, and student visibility deterministic.
+- [x] Add explicit wrong-role coverage for every administrative theory-editor procedure.
+- [x] Save a new checkpoint after the verified theory-editor and expanded content work.
