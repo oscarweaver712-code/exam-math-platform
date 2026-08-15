@@ -126,6 +126,7 @@ export const examTaskTypes = mysqlTable(
     part: mysqlEnum("part", ["part1", "part2"]).notNull(),
     sortOrder: int("sortOrder").default(0).notNull(),
     description: text("description"),
+    requiresVisual: boolean("requiresVisual").default(false).notNull(),
     isActive: boolean("isActive").default(true).notNull(),
     createdAt: bigint("createdAt", { mode: "number" }).notNull(),
     updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
@@ -361,6 +362,7 @@ export const tasks = mysqlTable(
       .notNull()
       .references(() => examTaskTypes.id, { onDelete: "restrict" }),
     slug: varchar("slug", { length: 160 }).notNull(),
+    internalId: varchar("internalId", { length: 64 }),
     title: varchar("title", { length: 220 }).notNull(),
     statementMarkdown: text("statementMarkdown").notNull(),
     answerChoices: json("answerChoices").$type<TaskChoice[]>(),
@@ -379,6 +381,7 @@ export const tasks = mysqlTable(
     sourceUrl: varchar("sourceUrl", { length: 1024 }),
     sourceRecordId: varchar("sourceRecordId", { length: 255 }),
     sourceAccessedAt: bigint("sourceAccessedAt", { mode: "number" }),
+    sourceExamYear: int("sourceExamYear"),
     contentVersion: int("contentVersion").default(1).notNull(),
     status: mysqlEnum("status", ["draft", "review", "published", "archived"])
       .default("draft")
@@ -393,8 +396,29 @@ export const tasks = mysqlTable(
   },
   table => [
     uniqueIndex("tasks_track_slug_unique").on(table.examTrackId, table.slug),
+    uniqueIndex("tasks_internal_id_unique").on(table.internalId),
     index("tasks_public_catalog_idx").on(table.examTrackId, table.status, table.difficulty),
     index("tasks_task_type_idx").on(table.examTaskTypeId),
+  ],
+);
+
+/** Owner-governed editorial access. Revocation keeps the user account and learning data intact. */
+export const editorialAccessRoles = mysqlTable(
+  "editorial_access_roles",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: mysqlEnum("role", ["owner", "admin", "editor"]).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    grantedByUserId: int("grantedByUserId").references(() => users.id, { onDelete: "set null" }),
+    revokedByUserId: int("revokedByUserId").references(() => users.id, { onDelete: "set null" }),
+    revokedAt: bigint("revokedAt", { mode: "number" }),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    uniqueIndex("editorial_access_roles_user_unique").on(table.userId),
+    index("editorial_access_roles_active_idx").on(table.isActive, table.role),
   ],
 );
 

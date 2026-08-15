@@ -88,9 +88,10 @@ describe("public bank and tutor homework flow", () => {
     expect(overview.taskTypes.map(item => item.kimNumber)).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)));
     expect(overview.taskTypes.filter(item => item.part === "part1")).toHaveLength(19);
     expect(overview.taskTypes.filter(item => item.part === "part2")).toHaveLength(6);
-    const listing = await caller.publicBank.listTasks({});
-    expect(listing.length).toBeGreaterThan(0);
-    expect(new Set(listing.map(item => item.kimNumber))).toEqual(new Set(Array.from({ length: 25 }, (_, index) => String(index + 1))));
+    const listing = await caller.publicBank.listTasks({ page: 1, pageSize: 12 });
+    expect(listing.items).toHaveLength(12);
+    expect(listing.total).toBeGreaterThanOrEqual(50);
+    expect(listing.pageCount).toBeGreaterThan(1);
     const variants = await caller.publicBank.listVariants();
     expect(variants.length).toBeGreaterThan(0);
     const publishedVariant = await caller.publicBank.getVariant({ slug: variants[0].slug });
@@ -98,8 +99,8 @@ describe("public bank and tutor homework flow", () => {
     expect(publishedVariant.items.map(item => item.sortOrder)).toEqual(Array.from({ length: 25 }, (_, index) => index + 1));
     const ephemeralVariant = await caller.publicBank.generateSessionVariant({ entropy: `${suffix}-ephemeral` });
     expect(ephemeralVariant).toHaveLength(25);
-    const details = await caller.publicBank.getTask({ slug: listing[0].slug });
-    expect(details.title).toBe(listing[0].title);
+    const details = await caller.publicBank.getTask({ slug: listing.items[0].slug });
+    expect(details.title).toBe(listing.items[0].title);
     expect(details.part).toBe("part1");
     expect(details.hints.length).toBeGreaterThanOrEqual(2);
     expect(details.solutionSteps.length).toBeGreaterThanOrEqual(3);
@@ -254,7 +255,7 @@ describe("public bank and tutor homework flow", () => {
         sourceKind: tasks.sourceKind,
       })
       .from(tasks)
-      .where(eq(tasks.id, publicTasks[0].id))
+      .where(eq(tasks.id, publicTasks.items[0].id))
       .limit(1);
     if (!base) throw new Error("Base prototype task unavailable");
     const now = Date.now();
@@ -263,7 +264,7 @@ describe("public bank and tutor homework flow", () => {
       const inserted = await (await getDb())!.insert(tasks).values({ ...base, slug, title: `${status} internal task`, contentVersion: 1, status, createdAt: now, updatedAt: now, publishedAt: null });
       temporaryTaskIds.push(Number(inserted[0].insertId));
       const listing = await publicCaller.publicBank.listTasks({});
-      expect(listing.some(task => task.slug === slug)).toBe(false);
+      expect(listing.items.some(task => task.slug === slug)).toBe(false);
       await expect(publicCaller.publicBank.getTask({ slug })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
   });
@@ -291,10 +292,10 @@ describe("public bank and tutor homework flow", () => {
     await adminCaller.school.admin.clearImportCase({ importCaseId: createdCase.importCaseId, note: "Условия использования проверены; разрешена редакторская адаптация без копирования исходной формулировки.", rightsBasis: "Проверено редактором по зарегистрированному источнику.", rightsEvidenceUrl: "https://fipi.ru/oge/demoversii-specifikacii-kodifikatory" });
     const converted = await adminCaller.school.admin.convertImportCase(convertInput);
     temporaryTaskIds.push(converted.taskId);
-    await expect(adminCaller.school.admin.importCases()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: createdCase.importCaseId, status: "converted", convertedTaskId: converted.taskId })]));
+    await expect(adminCaller.school.admin.importCases({ page: 1, pageSize: 12 })).resolves.toEqual(expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ id: createdCase.importCaseId, status: "converted", convertedTaskId: converted.taskId })]) }));
     const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4xGQAAAAASUVORK5CYII=";
     const uploaded = await adminCaller.school.admin.uploadTaskMedia({ taskId: converted.taskId, placement: "statement", altText: "Тестовое внешнее изображение для проверки модерации.", sourceKind: "external", sourceUrl: "https://example.test/image-source", fileName: "review.png", contentType: "image/png", dataUrl });
-    await expect(adminCaller.school.admin.externalMediaQueue()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, taskId: converted.taskId })]));
+    await expect(adminCaller.school.admin.externalMediaQueue({ page: 1, pageSize: 12 })).resolves.toEqual(expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, taskId: converted.taskId })]) }));
     await expect(blockedCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await adminCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." });
     await expect(adminCaller.school.admin.getTask({ taskId: converted.taskId })).resolves.toEqual(expect.objectContaining({ visuals: expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, reviewStatus: "approved" })]) }));
@@ -317,17 +318,17 @@ describe("public bank and tutor homework flow", () => {
     if (!topicSlug || !kimNumber) throw new Error("Task editor options unavailable");
     const slug = `source-lifecycle-${suffix}`;
     const taskInput = { title: "Редакционная задача с источником", slug, statementMarkdown: "Вычислите значение выражения и запишите ответ.", solutionMarkdown: "Подставьте данные и выполните вычисления по порядку.", topicSlug, kimNumber, difficulty: "basic" as const, answerKind: "short_integer" as const, correctAnswer: "1", sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: "fixture-source-001", hints: [], solutionSteps: [], status: "published" as const };
-    await expect(studentCaller.school.admin.archiveTask({ taskId: publicTasks[0].id })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.archiveTask({ taskId: publicTasks.items[0].id })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const createdTask = await adminCaller.school.admin.createTask(taskInput);
     temporaryTaskIds.push(createdTask.taskId);
     const publicCaller = appRouter.createCaller(createContext(null));
-    await expect(publicCaller.publicBank.listTasks({})).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId })]));
+    expect((await publicCaller.publicBank.listTasks({})).items).toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId })]));
     await adminCaller.school.admin.archiveTask({ taskId: createdTask.taskId, note: "Снято на редакционную проверку" });
-    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(false);
+    expect((await publicCaller.publicBank.listTasks({})).items.some(task => task.slug === slug)).toBe(false);
     await adminCaller.school.admin.restoreTask({ taskId: createdTask.taskId, status: "published", note: "Проверка завершена" });
-    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(true);
+    expect((await publicCaller.publicBank.listTasks({})).items.some(task => task.slug === slug)).toBe(true);
     await adminCaller.school.admin.softDeleteTask({ taskId: createdTask.taskId, note: "Тестовое мягкое удаление" });
-    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(false);
+    expect((await publicCaller.publicBank.listTasks({})).items.some(task => task.slug === slug)).toBe(false);
     await expect(adminCaller.school.admin.taskEvents({ taskId: createdTask.taskId })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "archived" }), expect.objectContaining({ eventType: "restored" }), expect.objectContaining({ eventType: "soft_deleted" })]));
   });
 
@@ -346,7 +347,7 @@ describe("public bank and tutor homework flow", () => {
     const [options, publicTasks] = await Promise.all([adminCaller.school.admin.options(), publicCaller.publicBank.listTasks({})]);
     const topicSlug = options.topics[0]?.slug;
     const kimNumber = options.taskTypes[0]?.kimNumber;
-    const relatedTaskId = publicTasks[0]?.id;
+    const relatedTaskId = publicTasks.items[0]?.id;
     if (!topicSlug || !kimNumber || !relatedTaskId) throw new Error("Theory editor options unavailable");
     const slug = `editor-theory-${suffix}`;
     const input = {

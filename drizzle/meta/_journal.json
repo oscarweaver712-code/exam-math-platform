@@ -64,6 +64,13 @@
       "when": 1786807415644,
       "tag": "0008_funny_maverick",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1786810278234,
+      "tag": "0009_clammy_loners",
+      "breakpoints": true
     }
   ]
 }

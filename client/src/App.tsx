@@ -11,6 +11,7 @@ import Workspace from "./pages/Workspace";
 import TutorWorkspace from "./pages/TutorWorkspace";
 import AdminTasks from "./pages/AdminTasks";
 import AdminTaskControl from "./pages/AdminTaskControl";
+import AdminAccess from "./pages/AdminAccess";
 import AdminIntake from "./pages/AdminIntake";
 import AdminTheory from "./pages/AdminTheory";
 import TheoryVersionCompare from "./pages/TheoryVersionCompare";
@@ -18,6 +19,7 @@ import AdminPromos from "./pages/AdminPromos";
 import { ExamTrackLanding, ExamTracks, SubjectCatalog } from "./pages/CatalogRoutes";
 import { VariantDetail, Variants } from "./pages/Variants";
 import VariantSolve from "./pages/VariantSolve";
+import SettingsPage from "./pages/SettingsPage";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -35,10 +37,12 @@ function Router() {
       <Route path={"/variants/session/:entropy/solve"} component={VariantSolve} />
       <Route path={"/theory"}>{() => <Redirect to="/bank" />}</Route>
       <Route path={"/workspace"} component={Workspace} />
+      <Route path={"/settings"} component={SettingsPage} />
       <Route path={"/practice"}>{() => <Redirect to="/bank" />}</Route>
       <Route path={"/tutor"} component={TutorWorkspace} />
       <Route path={"/admin/tasks"} component={AdminTasks} />
       <Route path={"/admin/tasks/control"} component={AdminTaskControl} />
+      <Route path={"/admin/access"} component={AdminAccess} />
       <Route path={"/admin/intake"} component={AdminIntake} />
       <Route path={"/admin/theory"} component={AdminTheory} />
       <Route path={"/admin/theory/compare/:theoryUnitId/:version"} component={TheoryVersionCompare} />

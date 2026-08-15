@@ -124,6 +124,7 @@ const FULL_KIM_VARIATION_TASKS = [
 ] as const;
 
 async function ensureOgeTaskTypes(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const visualKimNumbers = new Set(["1", "2", "3", "4", "5", "7", "11", "13", "14", "15", "16", "17", "18", "22", "23", "24", "25"]);
   const existing = await db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId));
   const legacy = existing.find(item => item.kimNumber === "1–5");
   if (legacy && !existing.some(item => item.kimNumber === "1")) {
@@ -135,9 +136,9 @@ async function ensureOgeTaskTypes(db: NonNullable<Awaited<ReturnType<typeof getD
   const missing = FULL_OGE_KIM_TYPES.filter(([kimNumber]) => !existingByNumber.has(kimNumber));
   await Promise.all(FULL_OGE_KIM_TYPES.flatMap(([kimNumber, title, part]) => {
     const id = existingByNumber.get(kimNumber);
-    return id ? [db.update(examTaskTypes).set({ title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, isActive: true, updatedAt: timestamp }).where(eq(examTaskTypes.id, id))] : [];
+    return id ? [db.update(examTaskTypes).set({ title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, requiresVisual: visualKimNumbers.has(kimNumber), isActive: true, updatedAt: timestamp }).where(eq(examTaskTypes.id, id))] : [];
   }));
-  if (missing.length) await db.insert(examTaskTypes).values(missing.map(([kimNumber, title, part]) => ({ examTrackId: trackId, kimNumber, title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, isActive: true, createdAt: timestamp, updatedAt: timestamp })));
+  if (missing.length) await db.insert(examTaskTypes).values(missing.map(([kimNumber, title, part]) => ({ examTrackId: trackId, kimNumber, title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, requiresVisual: visualKimNumbers.has(kimNumber), isActive: true, createdAt: timestamp, updatedAt: timestamp })));
 }
 
 async function ensureTheorySeed(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
@@ -205,6 +206,7 @@ async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<type
     examTrackId: trackId,
     examTaskTypeId: idFor(taskTypeIds, kimNumber),
     slug,
+    internalId: `TASK-SEED-${slug.toUpperCase()}`,
     title,
     statementMarkdown,
     answerKind,
@@ -485,6 +487,7 @@ async function seedOgeData() {
       examTrackId: track.id,
       examTaskTypeId: idFor(taskTypeIds, kimNumber),
       slug,
+      internalId: `TASK-SEED-${slug.toUpperCase()}`,
       title,
       statementMarkdown,
       answerKind,

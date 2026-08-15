@@ -41,7 +41,8 @@ const publicFilters = z.object({
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
   part: z.enum(["part1", "part2"]).optional(),
-  difficulty: z.enum(["basic", "standard", "advanced"]).optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(6).max(24).default(12),
 });
 
 async function requireDb() {
@@ -167,10 +168,18 @@ export const appRouter = router({
       if (input.topicSlug) filters.push(eq(curriculumUnits.slug, input.topicSlug));
       if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
       if (input.part) filters.push(eq(examTaskTypes.part, input.part));
-      if (input.difficulty) filters.push(eq(tasks.difficulty, input.difficulty));
+      const offset = (input.page - 1) * input.pageSize;
+      const [totalRow] = await db
+        .select({ total: sql<number>`count(distinct ${tasks.id})` })
+        .from(tasks)
+        .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+        .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
+        .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
+        .where(and(...filters));
       const catalog = await db
         .select({
           id: tasks.id,
+          internalId: tasks.internalId,
           slug: tasks.slug,
           title: tasks.title,
           statementMarkdown: tasks.statementMarkdown,
@@ -191,11 +200,14 @@ export const appRouter = router({
         .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
         .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
         .where(and(...filters))
-        .orderBy(asc(examTaskTypes.sortOrder), asc(tasks.title));
+        .orderBy(asc(examTaskTypes.sortOrder), asc(tasks.id))
+        .limit(input.pageSize)
+        .offset(offset);
       const ids = catalog.map(task => task.id);
       const visualRows = ids.length ? await db.select({ taskId: taskVisuals.taskId }).from(taskVisuals).where(and(inArray(taskVisuals.taskId, ids), eq(taskVisuals.reviewStatus, "approved"))) : [];
       const visualTaskIds = new Set(visualRows.map(item => item.taskId));
-      return catalog.map(task => ({ ...task, hasReviewedVisual: visualTaskIds.has(task.id) }));
+      const total = Number(totalRow?.total ?? 0);
+      return { items: catalog.map(task => ({ ...task, hasReviewedVisual: visualTaskIds.has(task.id) })), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
     }),
     getTask: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
       const track = await getOgeTrack();
