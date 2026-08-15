@@ -116,8 +116,8 @@
 - [ ] Add Vitest coverage for import rights gating, media moderation, full-KIM coverage, variant generation, public visibility, and scheduled job idempotency.
 - [ ] Verify responsive public and admin workflows, then save a checkpoint for the routed variant system.
 - [x] Remove the KIM-structure showcase and other internal-content scaffolding from the first public screen.
-- [ ] Replace the initial subject/exam sequence with a direct, user-goal-first entry to OGE tasks and variants while retaining deeper navigation on demand.
-- [ ] Simplify the task bank and variant entry points around immediate actions: find a task, start a ready variant, or assemble a session variant.
+- [x] Replace the initial subject/exam sequence with a direct, user-goal-first entry to OGE tasks and variants while retaining deeper navigation on demand.
+- [x] Simplify the task bank and variant entry points around immediate actions: find a task, start a ready variant, or assemble a session variant.
 - [ ] Verify the revised desktop and mobile UX, then save a checkpoint for the ergonomic public experience.
 - [x] Establish a strict content policy: only verified OGE materials from the current examination year and the preceding three years may be represented as official-source content; unverified prototype material remains visibly author-created and non-official.
 - [x] Add server-enforced cursor or offset pagination with a capped page size, total count, stable ordering, and compact page controls for the public task bank and editorial queues.
@@ -125,7 +125,7 @@
 - [x] Remove per-task marketing titles from the public catalog; display the KIM number and the official-type label from the task-type catalog instead.
 - [x] Remove public difficulty labels from the bank and preserve KIM number, part, source and review state as the student-facing task taxonomy.
 - [ ] Add authoritative task-type labels and required-visual guidance per OGE KIM number so editors can detect tasks that need a reviewed diagram or image.
-- [ ] Build a scalable sidebar-based personal cabinet with separate student, tutor, administrator and settings areas, with settings outside the learning flow.
+- [x] Build a scalable sidebar-based personal cabinet with separate student, tutor, administrator and settings areas, with settings outside the learning flow.
 - [x] Add owner-controlled administrator delegation and revocation tied to existing accounts, while preserving users' learning progress when editorial access is removed.
 - [x] Add explicit Russian-market compliance safeguards to editorial intake, user data handling, source attribution and public content warnings; obtain legal review before relying on the policy in production.
 - [x] Add the supplied 3:1 mathematics lessons banner as a responsive, non-obscuring homepage promotion slot using the approved asset without cropping its QR code.

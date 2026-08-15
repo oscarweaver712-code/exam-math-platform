@@ -40,6 +40,7 @@
   --app-field: #17171b;
   --app-field-border: rgba(255,255,255,.14);
   --app-placeholder: #77757c;
+  --diagram-stroke: #f3eee7;
   --background: oklch(0.12 0.006 286);
   --foreground: oklch(0.95 0.01 80);
   --card: oklch(0.17 0.008 286);
@@ -145,6 +146,7 @@ html:not(.dark) {
   --app-field: #fffdf9;
   --app-field-border: #ded6cb;
   --app-placeholder: #8a8178;
+  --diagram-stroke: #3c342c;
 }
 html:not(.dark) body { background: #fffaf4; color: #201f1c; }
 html:not(.dark) .app-header { background: rgba(255,250,244,.88) !important; border-color: rgba(63,52,42,.12) !important; }

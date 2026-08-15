@@ -370,7 +370,7 @@ export const schoolRouter = router({
       const { db, trackId, subjectId } = await getMathTrack();
       const [topics, taskTypes] = await Promise.all([
         db.select({ slug: curriculumUnits.slug, title: curriculumUnits.title }).from(curriculumUnits).where(eq(curriculumUnits.subjectId, subjectId)).orderBy(asc(curriculumUnits.sortOrder)),
-        db.select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId)).orderBy(asc(examTaskTypes.sortOrder)),
+        db.select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title, requiresVisual: examTaskTypes.requiresVisual }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId)).orderBy(asc(examTaskTypes.sortOrder)),
       ]);
       return { topics, taskTypes };
     }),
@@ -484,6 +484,7 @@ export const schoolRouter = router({
           id: tasks.id,
           title: tasks.title,
           slug: tasks.slug,
+          internalId: tasks.internalId,
           statementMarkdown: tasks.statementMarkdown,
           solutionMarkdown: tasks.solutionMarkdown,
           answerKind: tasks.answerKind,

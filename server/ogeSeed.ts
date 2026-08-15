@@ -239,6 +239,13 @@ async function ensureTaskVisualSeed(db: NonNullable<Awaited<ReturnType<typeof ge
     ["isosceles-angle", "isosceles-40", "Схема равнобедренного треугольника с углом 40 градусов при вершине."],
     ["function-value", "function-line-3x-minus-2", "Координатная плоскость с графиком прямой y равно 3x минус 2 и отмеченной точкой при x равно 4."],
     ["train-speed", "rate-time-distance-180-3", "Схема движения поезда: пройденное расстояние 180 километров за 3 часа."],
+    ["kim-07-coordinate", "coordinate-point-minus-3-5", "Координатная плоскость с точкой A с координатами минус 3 и 5."],
+    ["kim-14-rectangle", "rectangle-diagonal-5-12", "Прямоугольник со сторонами 5 и 12 и диагональю."],
+    ["kim-15-similarity", "similar-triangles-scale-6", "Два подобных треугольника со стороной 6 и коэффициентом подобия 1,5."],
+    ["kim-16-area", "parallelogram-base-height", "Параллелограмм с основанием 11 и высотой 6."],
+    ["kim-17-hypotenuse", "right-triangle-6-hypotenuse-10", "Прямоугольный треугольник с гипотенузой 10 и катетом 6."],
+    ["kim-24-radius", "circle-circumference-10pi", "Окружность с длиной 10 пи и радиусом r."],
+    ["kim-25-complex-geometry", "trapezoid-bases-height", "Трапеция с основаниями 8 и 14 и высотой 5."],
   ] as const;
   const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
