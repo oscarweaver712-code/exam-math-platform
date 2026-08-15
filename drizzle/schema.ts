@@ -375,8 +375,10 @@ export const tasks = mysqlTable(
     sourceKind: mysqlEnum("sourceKind", ["author", "fipi", "partner"])
       .default("author")
       .notNull(),
+    sourceTitle: varchar("sourceTitle", { length: 255 }),
     sourceUrl: varchar("sourceUrl", { length: 1024 }),
     sourceRecordId: varchar("sourceRecordId", { length: 255 }),
+    sourceAccessedAt: bigint("sourceAccessedAt", { mode: "number" }),
     contentVersion: int("contentVersion").default(1).notNull(),
     status: mysqlEnum("status", ["draft", "review", "published", "archived"])
       .default("draft")
@@ -384,12 +386,36 @@ export const tasks = mysqlTable(
     createdAt: bigint("createdAt", { mode: "number" }).notNull(),
     updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
     publishedAt: bigint("publishedAt", { mode: "number" }),
+    archivedAt: bigint("archivedAt", { mode: "number" }),
+    archivedReason: varchar("archivedReason", { length: 500 }),
+    deletedAt: bigint("deletedAt", { mode: "number" }),
+    deletedReason: varchar("deletedReason", { length: 500 }),
   },
   table => [
     uniqueIndex("tasks_track_slug_unique").on(table.examTrackId, table.slug),
     index("tasks_public_catalog_idx").on(table.examTrackId, table.status, table.difficulty),
     index("tasks_task_type_idx").on(table.examTaskTypeId),
   ],
+);
+
+/** Immutable record of editorial actions for a task. Soft deletion preserves this audit trail. */
+export const taskEditorialEvents = mysqlTable(
+  "task_editorial_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    taskId: int("taskId")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    editorUserId: int("editorUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    eventType: mysqlEnum("eventType", ["created", "updated", "published", "archived", "restored", "soft_deleted", "source_updated", "media_added", "media_removed"])
+      .notNull(),
+    note: varchar("note", { length: 500 }),
+    snapshot: json("snapshot").$type<Record<string, unknown>>(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  },
+  table => [index("task_editorial_events_task_created_idx").on(table.taskId, table.createdAt)],
 );
 
 /**

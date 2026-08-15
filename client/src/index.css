@@ -155,11 +155,13 @@ html:not(.dark) .bg-\[\#151518\], html:not(.dark) .bg-\[\#17171b\], html:not(.da
 html:not(.dark) .bg-\[\#101012\], html:not(.dark) .bg-\[\#0e0e10\], html:not(.dark) .bg-\[\#111114\], html:not(.dark) .bg-\[\#19191d\] { background-color: var(--app-inset) !important; }
 html:not(.dark) .bg-white { background-color: var(--app-surface) !important; }
 html:not(.dark) .bg-\[\#eff6fa\], html:not(.dark) .bg-\[\#e9f2f8\], html:not(.dark) .bg-\[\#202025\] { background-color: var(--muted) !important; }
-html:not(.dark) .text-\[\#f5f0e9\], html:not(.dark) .text-\[\#f7f2eb\], html:not(.dark) .text-\[\#f6f2ed\], html:not(.dark) .text-\[\#e9e4de\], html:not(.dark) .text-\[\#e6e1da\], html:not(.dark) .text-\[\#e2ddd6\], html:not(.dark) .text-\[\#d8d3cc\], html:not(.dark) .text-slate-950, html:not(.dark) .text-slate-900, html:not(.dark) .text-slate-800 { color: var(--app-foreground) !important; }
+html:not(.dark) .text-\[\#f5f0e9\], html:not(.dark) .text-\[\#f7f2eb\], html:not(.dark) .text-\[\#f6f2ed\], html:not(.dark) .text-\[\#e9e4de\], html:not(.dark) .text-\[\#e6e1da\], html:not(.dark) .text-\[\#e2ddd6\], html:not(.dark) .text-\[\#d8d3cc\], html:not(.dark) .text-\[\#d7d1c9\], html:not(.dark) .text-slate-950, html:not(.dark) .text-slate-900, html:not(.dark) .text-slate-800 { color: var(--app-foreground) !important; }
 html:not(.dark) .text-\[\#aaa7ae\], html:not(.dark) .text-\[\#b9b6bc\], html:not(.dark) .text-\[\#a8a5ac\], html:not(.dark) .text-\[\#d3cec7\], html:not(.dark) .text-\[\#c7c3ca\], html:not(.dark) .text-slate-700, html:not(.dark) .text-slate-600 { color: var(--app-muted) !important; }
 html:not(.dark) .text-\[\#77747b\], html:not(.dark) .text-\[\#89868d\], html:not(.dark) .text-\[\#8e8b91\], html:not(.dark) .text-\[\#a7a4aa\], html:not(.dark) .text-slate-500, html:not(.dark) .text-slate-400 { color: var(--muted-foreground) !important; }
 html:not(.dark) .border-white\/10, html:not(.dark) .border-white\/9, html:not(.dark) .border-white\/8, html:not(.dark) .border-white\/12, html:not(.dark) .border-white\/14, html:not(.dark) .border-white\/18, html:not(.dark) .border-slate-200, html:not(.dark) .border-slate-100 { border-color: var(--app-border) !important; }
 html:not(.dark) .bg-white\/4, html:not(.dark) .bg-white\/5, html:not(.dark) .bg-white\/6, html:not(.dark) .bg-white\/7, html:not(.dark) .bg-white\/8, html:not(.dark) .bg-white\/10 { background-color: rgba(67,54,43,.055) !important; }
+html:not(.dark) .text-emerald-200 { color: #16613f !important; }
+html:not(.dark) .text-sky-200 { color: #1f5f78 !important; }
 html:not(.dark) .obsidian-grid { background-image: linear-gradient(rgba(87,67,48,.075) 1px, transparent 1px), linear-gradient(90deg, rgba(87,67,48,.075) 1px, transparent 1px); }
 html:not(.dark) .surface-card { background: linear-gradient(145deg, #fffdf9, #f5ede4); border-color: rgba(74,61,50,.14); box-shadow: 0 18px 42px rgba(78,52,28,.08); }
 html:not(.dark) .orange-glow { box-shadow: 0 0 0 1px rgba(255,91,20,.35), 0 18px 50px rgba(255,91,20,.12); }
@@ -172,3 +174,6 @@ html:not(.dark) .bg-\[\#101012\] input, html:not(.dark) .bg-\[\#101012\] textare
 .theme-inset { background-color: var(--app-inset); border-color: var(--app-border); }
 .theme-muted { color: var(--app-muted); }
 .theme-foreground { color: var(--app-foreground); }
+
+/* Bank-first calibration: theory remains stored and editable, but is not part of the public task-solving route. */
+.theme-page .lg\:sticky > section:first-child:has(p.text-\[10px\].font-extrabold.uppercase.tracking-\[\.16em\]) { display: none; }

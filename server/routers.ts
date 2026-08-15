@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -116,14 +116,18 @@ export const appRouter = router({
       if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
       if (input.part) filters.push(eq(examTaskTypes.part, input.part));
       if (input.difficulty) filters.push(eq(tasks.difficulty, input.difficulty));
-      return db
+      const catalog = await db
         .select({
           id: tasks.id,
           slug: tasks.slug,
           title: tasks.title,
           statementMarkdown: tasks.statementMarkdown,
+          status: tasks.status,
           difficulty: tasks.difficulty,
           sourceKind: tasks.sourceKind,
+          sourceTitle: tasks.sourceTitle,
+          sourceUrl: tasks.sourceUrl,
+          sourceRecordId: tasks.sourceRecordId,
           kimNumber: examTaskTypes.kimNumber,
           part: examTaskTypes.part,
           taskType: examTaskTypes.title,
@@ -136,6 +140,10 @@ export const appRouter = router({
         .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
         .where(and(...filters))
         .orderBy(asc(examTaskTypes.sortOrder), asc(tasks.title));
+      const ids = catalog.map(task => task.id);
+      const visualRows = ids.length ? await db.select({ taskId: taskVisuals.taskId }).from(taskVisuals).where(and(inArray(taskVisuals.taskId, ids), eq(taskVisuals.reviewStatus, "approved"))) : [];
+      const visualTaskIds = new Set(visualRows.map(item => item.taskId));
+      return catalog.map(task => ({ ...task, hasReviewedVisual: visualTaskIds.has(task.id) }));
     }),
     getTask: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
       const track = await getOgeTrack();
@@ -151,7 +159,9 @@ export const appRouter = router({
           solutionMarkdown: tasks.solutionMarkdown,
           difficulty: tasks.difficulty,
           sourceKind: tasks.sourceKind,
+          sourceTitle: tasks.sourceTitle,
           sourceUrl: tasks.sourceUrl,
+          sourceRecordId: tasks.sourceRecordId,
           kimNumber: examTaskTypes.kimNumber,
           part: examTaskTypes.part,
           taskType: examTaskTypes.title,

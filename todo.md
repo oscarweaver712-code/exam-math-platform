@@ -90,3 +90,15 @@
 - [x] Save a new checkpoint after the verified media, version history, and guided self-study work.
 - [x] Add a concise compare view for the current and selected saved theory revision before an administrator initiates rollback.
 - [x] Add explicit unauthenticated and wrong-role Vitest coverage for every new theory media and version-history procedure.
+- [x] Audit the current public navigation, task-bank metadata, source labels, task media, and editorial lifecycle against the simplified bank-first product direction.
+- [x] Hide theory and practice from the public primary navigation and route users through a single clear OГЭ task-bank entry point while retaining content safely in the database.
+- [x] Make each public task show its official OГЭ task number, part, topic, source classification, source title, source link, editorial status, and reviewed-media availability in a compact consistent format.
+- [x] Extend task administration with archive, restore, soft delete, media management, source registration, and a clear audit trail; retain permanent deletion only as a deliberate later policy decision.
+- [x] Design an evidence-based ingestion workflow for FIPI and external sources: manual source registration, rights review, metadata extraction, media capture, editorial adaptation, review, and publish.
+- [x] Research official FIPI access patterns and permissible reuse boundaries; do not build a blind scraper or copy protected task text before rights and technical constraints are validated.
+- [x] Verify the simplified bank-first interface, full task lifecycle, source labelling, and responsive media handling, then save a checkpoint.
+- [x] Document the completed bank-first audit in a verifiable checklist covering navigation, metadata, sources, media, and task lifecycle decisions.
+- [x] Show the source link and explicit public editorial status alongside the KIM number, part, topic, classification, title, and reviewed-media signal in every public task card.
+- [x] Display source classification and source title as separate visible fields in every public task card, and cover both fields in the public-list integration test.
+- [x] Restore accessible contrast for publication-status and source-classification labels on light-theme task cards.
+- [x] Create a new checkpoint after the final bank-first verification work.

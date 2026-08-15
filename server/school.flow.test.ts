@@ -8,6 +8,7 @@ import {
   learningPromos,
   platformProfiles,
   subjects,
+  taskEditorialEvents,
   taskTheoryUnits,
   tasks,
   theoryCurriculumUnits,
@@ -63,6 +64,7 @@ describe("public bank and tutor homework flow", () => {
       await db.delete(theoryUnits).where(inArray(theoryUnits.id, temporaryTheoryIds));
     }
     if (temporaryPromoIds.length) await db.delete(learningPromos).where(inArray(learningPromos.id, temporaryPromoIds));
+    if (temporaryTaskIds.length) await db.delete(taskEditorialEvents).where(inArray(taskEditorialEvents.taskId, temporaryTaskIds));
     if (tutorId) await db.delete(users).where(eq(users.id, tutorId));
     if (studentId) await db.delete(users).where(eq(users.id, studentId));
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
@@ -244,6 +246,36 @@ describe("public bank and tutor homework flow", () => {
       expect(listing.some(task => task.slug === slug)).toBe(false);
       await expect(publicCaller.publicBank.getTask({ slug })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
+  });
+
+  it("keeps source metadata and the archive lifecycle under administrator control", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable for task lifecycle test");
+    const openId = `${suffix}-task-admin`;
+    await db.insert(users).values({ openId, email: `${suffix}-task-admin@example.test`, name: "Редактор банка", loginMethod: "test", role: "admin", lastSignedIn: new Date() });
+    const [created] = await db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1);
+    adminId = created?.id ?? null;
+    if (!adminId) throw new Error("Task editor user was not created");
+    const adminCaller = appRouter.createCaller(createContext(testUser(adminId, openId, `${suffix}-task-admin@example.test`, "Редактор банка", "admin")));
+    const studentCaller = appRouter.createCaller(createContext(testUser(adminId + 90_000, `${suffix}-student-blocked`, `${suffix}-student-blocked@example.test`, "Ученик", "user")));
+    const [options, publicTasks] = await Promise.all([adminCaller.school.admin.options(), appRouter.createCaller(createContext(null)).publicBank.listTasks({})]);
+    const topicSlug = options.topics[0]?.slug;
+    const kimNumber = options.taskTypes[0]?.kimNumber;
+    if (!topicSlug || !kimNumber) throw new Error("Task editor options unavailable");
+    const slug = `source-lifecycle-${suffix}`;
+    const taskInput = { title: "Редакционная задача с источником", slug, statementMarkdown: "Вычислите значение выражения и запишите ответ.", solutionMarkdown: "Подставьте данные и выполните вычисления по порядку.", topicSlug, kimNumber, difficulty: "basic" as const, answerKind: "short_integer" as const, correctAnswer: "1", sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: "fixture-source-001", hints: [], solutionSteps: [], status: "published" as const };
+    await expect(studentCaller.school.admin.archiveTask({ taskId: publicTasks[0].id })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const createdTask = await adminCaller.school.admin.createTask(taskInput);
+    temporaryTaskIds.push(createdTask.taskId);
+    const publicCaller = appRouter.createCaller(createContext(null));
+    await expect(publicCaller.publicBank.listTasks({})).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId })]));
+    await adminCaller.school.admin.archiveTask({ taskId: createdTask.taskId, note: "Снято на редакционную проверку" });
+    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(false);
+    await adminCaller.school.admin.restoreTask({ taskId: createdTask.taskId, status: "published", note: "Проверка завершена" });
+    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(true);
+    await adminCaller.school.admin.softDeleteTask({ taskId: createdTask.taskId, note: "Тестовое мягкое удаление" });
+    expect((await publicCaller.publicBank.listTasks({})).some(task => task.slug === slug)).toBe(false);
+    await expect(adminCaller.school.admin.taskEvents({ taskId: createdTask.taskId })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "archived" }), expect.objectContaining({ eventType: "restored" }), expect.objectContaining({ eventType: "soft_deleted" })]));
   });
 
   it("keeps theory drafts private and allows only an administrator to publish an editor-reviewed theory unit", async () => {

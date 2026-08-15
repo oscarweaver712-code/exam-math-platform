@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -12,9 +12,11 @@ import {
   platformProfiles,
   subjects,
   taskCurriculumUnits,
+  taskEditorialEvents,
   taskHints,
   taskSolutionSteps,
   taskTheoryUnits,
+  taskVisuals,
   tasks,
   theoryCurriculumUnits,
   theoryExamTracks,
@@ -71,10 +73,28 @@ const adminTaskInput = z.object({
   difficulty: z.enum(["basic", "standard", "advanced"]),
   answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]),
   correctAnswer: z.string().max(1024).optional(),
+  sourceKind: z.enum(["author", "fipi", "partner"]).default("author"),
+  sourceTitle: z.string().trim().max(255).optional(),
+  sourceUrl: z.string().url().max(1024).optional(),
+  sourceRecordId: z.string().trim().max(255).optional(),
   hints: z.array(z.object({ title: z.string().trim().min(2).max(160), bodyMarkdown: z.string().trim().min(5).max(4000) })).max(6).default([]),
   solutionSteps: z.array(z.object({ title: z.string().trim().min(2).max(180), bodyMarkdown: z.string().trim().min(5).max(6000) })).max(12).default([]),
   status: z.enum(["draft", "review", "published"]).default("draft"),
 });
+
+const taskLifecycleInput = z.object({ taskId: z.number().int().positive(), note: z.string().trim().min(3).max(500).optional() });
+
+async function recordTaskEvent(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  taskId: number,
+  editorUserId: number,
+  eventType: "created" | "updated" | "published" | "archived" | "restored" | "soft_deleted" | "source_updated" | "media_added" | "media_removed",
+  note?: string,
+) {
+  const [task] = await db.select({ title: tasks.title, slug: tasks.slug, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, contentVersion: tasks.contentVersion, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  if (!task) return;
+  await db.insert(taskEditorialEvents).values({ taskId, editorUserId, eventType, note: note || null, snapshot: task, createdAt: Date.now() });
+}
 
 const adminTheoryInput = z.object({
   title: z.string().min(4).max(220),
@@ -97,6 +117,19 @@ const theoryMediaUploadInput = z.object({
   placement: z.enum(["lead", "body"]).default("body"),
   altText: z.string().trim().min(5).max(1000),
   caption: z.string().trim().max(500).optional(),
+  fileName: z.string().trim().min(1).max(180),
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
+  dataUrl: z.string().min(32).max(7_000_000),
+});
+
+const taskDiagramKey = z.enum(["triangle-angle-48-67", "isosceles-40", "function-line-3x-minus-2", "rate-time-distance-180-3"]);
+const taskMediaUploadInput = z.object({
+  taskId: z.number().int().positive(),
+  placement: z.enum(["statement", "solution"]).default("statement"),
+  altText: z.string().trim().min(5).max(1000),
+  caption: z.string().trim().max(500).optional(),
+  sourceKind: z.enum(["author", "external"]).default("author"),
+  sourceUrl: z.string().url().max(2048).optional(),
   fileName: z.string().trim().min(1).max(180),
   contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
   dataUrl: z.string().min(32).max(7_000_000),
@@ -265,7 +298,7 @@ export const schoolRouter = router({
     tasks: adminProcedure.query(async () => {
       const { db, trackId } = await getMathTrack();
       return db
-        .select({ id: tasks.id, title: tasks.title, slug: tasks.slug, status: tasks.status, difficulty: tasks.difficulty, kimNumber: examTaskTypes.kimNumber, topicTitle: curriculumUnits.title })
+        .select({ id: tasks.id, title: tasks.title, slug: tasks.slug, status: tasks.status, difficulty: tasks.difficulty, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt, kimNumber: examTaskTypes.kimNumber, topicTitle: curriculumUnits.title })
         .from(tasks)
         .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
         .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
@@ -294,6 +327,15 @@ export const schoolRouter = router({
           correctAnswer: tasks.correctAnswer,
           difficulty: tasks.difficulty,
           status: tasks.status,
+          sourceKind: tasks.sourceKind,
+          sourceTitle: tasks.sourceTitle,
+          sourceUrl: tasks.sourceUrl,
+          sourceRecordId: tasks.sourceRecordId,
+          sourceAccessedAt: tasks.sourceAccessedAt,
+          archivedAt: tasks.archivedAt,
+          archivedReason: tasks.archivedReason,
+          deletedAt: tasks.deletedAt,
+          deletedReason: tasks.deletedReason,
           topicSlug: curriculumUnits.slug,
           kimNumber: examTaskTypes.kimNumber,
         })
@@ -304,15 +346,16 @@ export const schoolRouter = router({
         .where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId)))
         .limit(1);
       if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
-      const [hints, solutionSteps] = await Promise.all([
+      const [hints, solutionSteps, visuals] = await Promise.all([
         db.select({ title: taskHints.title, bodyMarkdown: taskHints.bodyMarkdown }).from(taskHints).where(eq(taskHints.taskId, task.id)).orderBy(asc(taskHints.sortOrder)),
         db.select({ title: taskSolutionSteps.title, bodyMarkdown: taskSolutionSteps.bodyMarkdown }).from(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, task.id)).orderBy(asc(taskSolutionSteps.sortOrder)),
+        db.select({ id: taskVisuals.id, kind: taskVisuals.kind, placement: taskVisuals.placement, diagramKey: taskVisuals.diagramKey, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption, sourceKind: taskVisuals.sourceKind, sourceUrl: taskVisuals.sourceUrl, reviewStatus: taskVisuals.reviewStatus }).from(taskVisuals).where(eq(taskVisuals.taskId, task.id)).orderBy(asc(taskVisuals.sortOrder)),
       ]);
-      return { ...task, hints, solutionSteps };
+      return { ...task, hints, solutionSteps, visuals };
     }),
     createTask: adminProcedure
       .input(adminTaskInput)
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const { db, trackId, subjectId } = await getMathTrack();
         const [topic, taskType] = await Promise.all([
           db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, input.topicSlug))).limit(1),
@@ -320,17 +363,19 @@ export const schoolRouter = router({
         ]);
         if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Неверная тема или номер КИМ." });
         if (input.answerKind !== "manual" && !input.correctAnswer?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Для Части 1 нужен правильный ответ." });
-        const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType[0].id, slug: input.slug, title: input.title.trim(), statementMarkdown: input.statementMarkdown.trim(), answerKind: input.answerKind, correctAnswer: input.correctAnswer?.trim() || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown.trim(), difficulty: input.difficulty, sourceKind: "author", contentVersion: 1, status: input.status, createdAt: Date.now(), updatedAt: Date.now(), publishedAt: input.status === "published" ? Date.now() : null });
+        if (input.sourceKind !== "author" && !input.sourceUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего или партнёрского задания укажите URL первоисточника." });
+        const timestamp = Date.now();
+        const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType[0].id, slug: input.slug, title: input.title.trim(), statementMarkdown: input.statementMarkdown.trim(), answerKind: input.answerKind, correctAnswer: input.correctAnswer?.trim() || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown.trim(), difficulty: input.difficulty, sourceKind: input.sourceKind, sourceTitle: input.sourceKind === "author" ? "Авторская задача Школы 911" : input.sourceTitle?.trim() || null, sourceUrl: input.sourceUrl?.trim() || null, sourceRecordId: input.sourceRecordId?.trim() || null, sourceAccessedAt: input.sourceKind === "author" ? null : timestamp, contentVersion: 1, status: input.status, createdAt: timestamp, updatedAt: timestamp, publishedAt: input.status === "published" ? timestamp : null });
         const taskId = Number(inserted[0].insertId);
         await db.insert(taskCurriculumUnits).values({ taskId, curriculumUnitId: topic[0].id });
-        const timestamp = Date.now();
         if (input.hints.length) await db.insert(taskHints).values(input.hints.map((hint, index) => ({ taskId, title: hint.title, bodyMarkdown: hint.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         if (input.solutionSteps.length) await db.insert(taskSolutionSteps).values(input.solutionSteps.map((step, index) => ({ taskId, title: step.title, bodyMarkdown: step.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+        await recordTaskEvent(db, taskId, ctx.user.id, input.status === "published" ? "published" : "created", "Создание записи в банке.");
         return { taskId };
       }),
     updateTask: adminProcedure
       .input(adminTaskInput.extend({ taskId: z.number().int().positive() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const { db, trackId, subjectId } = await getMathTrack();
         const [existing, topic, taskType] = await Promise.all([
           db.select({ id: tasks.id, contentVersion: tasks.contentVersion }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1),
@@ -340,6 +385,8 @@ export const schoolRouter = router({
         if (!existing[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
         if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Неверная тема или номер КИМ." });
         if (input.answerKind !== "manual" && !input.correctAnswer?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Для Части 1 нужен правильный ответ." });
+        if (input.sourceKind !== "author" && !input.sourceUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего или партнёрского задания укажите URL первоисточника." });
+        const timestamp = Date.now();
         await db.update(tasks).set({
           examTaskTypeId: taskType[0].id,
           slug: input.slug,
@@ -349,20 +396,101 @@ export const schoolRouter = router({
           correctAnswer: input.correctAnswer?.trim() || null,
           solutionMarkdown: input.solutionMarkdown.trim(),
           difficulty: input.difficulty,
+          sourceKind: input.sourceKind,
+          sourceTitle: input.sourceKind === "author" ? "Авторская задача Школы 911" : input.sourceTitle?.trim() || null,
+          sourceUrl: input.sourceUrl?.trim() || null,
+          sourceRecordId: input.sourceRecordId?.trim() || null,
+          sourceAccessedAt: input.sourceKind === "author" ? null : timestamp,
           status: input.status,
           contentVersion: existing[0].contentVersion + 1,
-          publishedAt: input.status === "published" ? Date.now() : null,
-          updatedAt: Date.now(),
+          publishedAt: input.status === "published" ? timestamp : null,
+          updatedAt: timestamp,
         }).where(eq(tasks.id, input.taskId));
         await db.delete(taskCurriculumUnits).where(eq(taskCurriculumUnits.taskId, input.taskId));
         await db.insert(taskCurriculumUnits).values({ taskId: input.taskId, curriculumUnitId: topic[0].id });
         await db.delete(taskHints).where(eq(taskHints.taskId, input.taskId));
         await db.delete(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, input.taskId));
-        const timestamp = Date.now();
         if (input.hints.length) await db.insert(taskHints).values(input.hints.map((hint, index) => ({ taskId: input.taskId, title: hint.title, bodyMarkdown: hint.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         if (input.solutionSteps.length) await db.insert(taskSolutionSteps).values(input.solutionSteps.map((step, index) => ({ taskId: input.taskId, title: step.title, bodyMarkdown: step.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+        await recordTaskEvent(db, input.taskId, ctx.user.id, input.status === "published" ? "published" : "updated", "Обновление содержания или источника.");
         return { taskId: input.taskId };
       }),
+    archiveTask: adminProcedure.input(taskLifecycleInput).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id, deletedAt: tasks.deletedAt }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1);
+      if (!task || task.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена в активном архиве." });
+      const timestamp = Date.now();
+      await db.update(tasks).set({ status: "archived", archivedAt: timestamp, archivedReason: input.note || "Архивировано редактором.", updatedAt: timestamp }).where(eq(tasks.id, input.taskId));
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "archived", input.note);
+      return { taskId: input.taskId };
+    }),
+    restoreTask: adminProcedure.input(taskLifecycleInput.extend({ status: z.enum(["draft", "review", "published"]).default("draft") })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id, deletedAt: tasks.deletedAt }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1);
+      if (!task || task.deletedAt) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена или удалена." });
+      const timestamp = Date.now();
+      await db.update(tasks).set({ status: input.status, archivedAt: null, archivedReason: null, updatedAt: timestamp, publishedAt: input.status === "published" ? timestamp : null }).where(eq(tasks.id, input.taskId));
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "restored", input.note || `Восстановлено в статус ${input.status}.`);
+      return { taskId: input.taskId };
+    }),
+    softDeleteTask: adminProcedure.input(taskLifecycleInput.extend({ note: z.string().trim().min(5).max(500) })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+      const timestamp = Date.now();
+      await db.update(tasks).set({ status: "archived", deletedAt: timestamp, deletedReason: input.note, archivedAt: timestamp, archivedReason: "Мягкое удаление", updatedAt: timestamp }).where(eq(tasks.id, input.taskId));
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "soft_deleted", input.note);
+      return { taskId: input.taskId };
+    }),
+    taskEvents: adminProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+      return db.select({ id: taskEditorialEvents.id, eventType: taskEditorialEvents.eventType, note: taskEditorialEvents.note, snapshot: taskEditorialEvents.snapshot, createdAt: taskEditorialEvents.createdAt, editorName: users.name }).from(taskEditorialEvents).leftJoin(users, eq(taskEditorialEvents.editorUserId, users.id)).where(eq(taskEditorialEvents.taskId, input.taskId)).orderBy(desc(taskEditorialEvents.createdAt));
+    }),
+    updateTaskSource: adminProcedure.input(z.object({ taskId: z.number().int().positive(), sourceKind: z.enum(["author", "fipi", "partner"]), sourceTitle: z.string().trim().max(255).optional(), sourceUrl: z.string().url().max(1024).optional(), sourceRecordId: z.string().trim().max(255).optional(), note: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Активная задача не найдена." });
+      if (input.sourceKind !== "author" && !input.sourceUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего источника нужен URL." });
+      await db.update(tasks).set({ sourceKind: input.sourceKind, sourceTitle: input.sourceKind === "author" ? "Авторская задача Школы 911" : input.sourceTitle?.trim() || null, sourceUrl: input.sourceUrl?.trim() || null, sourceRecordId: input.sourceRecordId?.trim() || null, sourceAccessedAt: input.sourceKind === "author" ? null : Date.now(), updatedAt: Date.now() }).where(eq(tasks.id, input.taskId));
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "source_updated", input.note || "Источник обновлён.");
+      return { taskId: input.taskId };
+    }),
+    addTaskDiagram: adminProcedure.input(z.object({ taskId: z.number().int().positive(), placement: z.enum(["statement", "solution"]).default("statement"), diagramKey: taskDiagramKey, altText: z.string().trim().min(5).max(1000), caption: z.string().trim().max(500).optional() })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Активная задача не найдена." });
+      const [last] = await db.select({ sortOrder: taskVisuals.sortOrder }).from(taskVisuals).where(eq(taskVisuals.taskId, input.taskId)).orderBy(desc(taskVisuals.sortOrder)).limit(1);
+      await db.insert(taskVisuals).values({ taskId: input.taskId, kind: "inline_svg", placement: input.placement, diagramKey: input.diagramKey, altText: input.altText, caption: input.caption || null, sourceKind: "author", reviewStatus: "approved", sortOrder: (last?.sortOrder ?? 0) + 1, createdAt: Date.now(), updatedAt: Date.now() });
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "media_added", `Добавлена схема ${input.diagramKey}.`);
+      return { success: true };
+    }),
+    uploadTaskMedia: adminProcedure.input(taskMediaUploadInput).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Активная задача не найдена." });
+      if (input.sourceKind === "external" && !input.sourceUrl) throw new TRPCError({ code: "BAD_REQUEST", message: "Для внешнего изображения укажите URL источника." });
+      const match = input.dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+      if (!match || match[1] !== input.contentType) throw new TRPCError({ code: "BAD_REQUEST", message: "Некорректный формат изображения." });
+      const bytes = Buffer.from(match[2], "base64");
+      if (!bytes.length || bytes.length > 5 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "Размер изображения должен быть не больше 5 МБ." });
+      const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const stored = await storagePut(`tasks/${input.taskId}/${Date.now()}-${safeName}`, bytes, input.contentType);
+      const [last] = await db.select({ sortOrder: taskVisuals.sortOrder }).from(taskVisuals).where(eq(taskVisuals.taskId, input.taskId)).orderBy(desc(taskVisuals.sortOrder)).limit(1);
+      const timestamp = Date.now();
+      const inserted = await db.insert(taskVisuals).values({ taskId: input.taskId, kind: "image_asset", placement: input.placement, assetUrl: stored.url, altText: input.altText, caption: input.caption || null, sourceKind: input.sourceKind, sourceUrl: input.sourceUrl?.trim() || null, reviewStatus: input.sourceKind === "author" ? "approved" : "review", sortOrder: (last?.sortOrder ?? 0) + 1, createdAt: timestamp, updatedAt: timestamp });
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "media_added", `Загружено изображение ${safeName}.`);
+      return { visualId: Number(inserted[0].insertId), url: stored.url, reviewStatus: input.sourceKind === "author" ? "approved" as const : "review" as const };
+    }),
+    removeTaskMedia: adminProcedure.input(z.object({ taskId: z.number().int().positive(), visualId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+      await db.delete(taskVisuals).where(and(eq(taskVisuals.id, input.visualId), eq(taskVisuals.taskId, input.taskId)));
+      await recordTaskEvent(db, input.taskId, ctx.user.id, "media_removed", "Удалён визуальный материал.");
+      return { success: true };
+    }),
     theory: adminProcedure.query(async () => {
       const { db, trackId } = await getMathTrack();
       return db
