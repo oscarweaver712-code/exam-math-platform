@@ -8,6 +8,7 @@ import {
   examTracks,
   homeworkAssignments,
   homeworkItems,
+  learningPromos,
   platformProfiles,
   subjects,
   taskCurriculumUnits,
@@ -79,6 +80,18 @@ const adminTheoryInput = z.object({
   sourceTitle: z.string().trim().max(255).optional(),
   sourceUrl: z.string().url().max(1024).optional(),
   status: z.enum(["draft", "review", "published", "archived"]).default("draft"),
+});
+
+const adminPromoInput = z.object({
+  placement: z.enum(["theory", "bank", "homework"]),
+  eyebrow: z.string().trim().min(3).max(140),
+  title: z.string().trim().min(4).max(220),
+  description: z.string().trim().min(10).max(2000),
+  ctaLabel: z.string().trim().min(2).max(120),
+  ctaUrl: z.string().url().max(1024),
+  isActive: z.boolean(),
+  startsAt: z.number().int().positive().optional(),
+  endsAt: z.number().int().positive().optional(),
 });
 
 export const schoolRouter = router({
@@ -189,6 +202,26 @@ export const schoolRouter = router({
     }),
   }),
   admin: router({
+    promos: adminProcedure.query(async () => {
+      const { db, trackId } = await getMathTrack();
+      return db.select().from(learningPromos).where(eq(learningPromos.examTrackId, trackId)).orderBy(desc(learningPromos.updatedAt));
+    }),
+    createPromo: adminProcedure.input(adminPromoInput).mutation(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      if (input.startsAt && input.endsAt && input.endsAt <= input.startsAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Дата окончания должна быть позже даты начала." });
+      const [lastPromo] = await db.select({ sortOrder: learningPromos.sortOrder }).from(learningPromos).where(eq(learningPromos.examTrackId, trackId)).orderBy(desc(learningPromos.sortOrder)).limit(1);
+      const timestamp = Date.now();
+      const inserted = await db.insert(learningPromos).values({ examTrackId: trackId, placement: input.placement, eyebrow: input.eyebrow, title: input.title, description: input.description, ctaLabel: input.ctaLabel, ctaUrl: input.ctaUrl, isActive: input.isActive, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null, sortOrder: (lastPromo?.sortOrder ?? 0) + 1, createdAt: timestamp, updatedAt: timestamp });
+      return { promoId: Number(inserted[0].insertId) };
+    }),
+    updatePromo: adminProcedure.input(adminPromoInput.extend({ promoId: z.number().int().positive() })).mutation(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      if (input.startsAt && input.endsAt && input.endsAt <= input.startsAt) throw new TRPCError({ code: "BAD_REQUEST", message: "Дата окончания должна быть позже даты начала." });
+      const [existing] = await db.select({ id: learningPromos.id }).from(learningPromos).where(and(eq(learningPromos.id, input.promoId), eq(learningPromos.examTrackId, trackId))).limit(1);
+      if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Промоблок не найден." });
+      await db.update(learningPromos).set({ placement: input.placement, eyebrow: input.eyebrow, title: input.title, description: input.description, ctaLabel: input.ctaLabel, ctaUrl: input.ctaUrl, isActive: input.isActive, startsAt: input.startsAt ?? null, endsAt: input.endsAt ?? null, updatedAt: Date.now() }).where(eq(learningPromos.id, input.promoId));
+      return { promoId: input.promoId };
+    }),
     tasks: adminProcedure.query(async () => {
       const { db, trackId } = await getMathTrack();
       return db

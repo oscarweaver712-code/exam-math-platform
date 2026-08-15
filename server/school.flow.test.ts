@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import {
   homeworkAssignments,
   homeworkItems,
+  learningPromos,
   platformProfiles,
   subjects,
   taskTheoryUnits,
@@ -39,6 +40,7 @@ describe("public bank and tutor homework flow", () => {
   let adminId: number | null = null;
   let temporaryTaskIds: number[] = [];
   let temporaryTheoryIds: number[] = [];
+  let temporaryPromoIds: number[] = [];
 
   afterEach(async () => {
     const db = await getDb();
@@ -60,12 +62,14 @@ describe("public bank and tutor homework flow", () => {
       await db.delete(theoryTaskTypes).where(inArray(theoryTaskTypes.theoryUnitId, temporaryTheoryIds));
       await db.delete(theoryUnits).where(inArray(theoryUnits.id, temporaryTheoryIds));
     }
+    if (temporaryPromoIds.length) await db.delete(learningPromos).where(inArray(learningPromos.id, temporaryPromoIds));
     if (tutorId) await db.delete(users).where(eq(users.id, tutorId));
     if (studentId) await db.delete(users).where(eq(users.id, studentId));
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
     if (temporaryTaskIds.length) await db.delete(tasks).where(inArray(tasks.id, temporaryTaskIds));
     temporaryTaskIds = [];
     temporaryTheoryIds = [];
+    temporaryPromoIds = [];
   });
 
   it("returns the published prototype tasks to a visitor without authentication", async () => {
@@ -196,6 +200,7 @@ describe("public bank and tutor homework flow", () => {
     };
     await expect(studentCaller.school.admin.createTheory(blockedTheoryInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.updateTheory({ ...blockedTheoryInput, theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.createPromo({ placement: "theory", eyebrow: "Эфир школы", title: "Разбор задач", description: "Собственный открытый разбор для проверки разграничения доступа.", ctaLabel: "Открыть", ctaUrl: "https://school911.example/events", isActive: false })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.profile.chooseRole({ role: "tutor" })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -268,5 +273,23 @@ describe("public bank and tutor homework flow", () => {
     expect(published).toEqual(expect.arrayContaining([
       expect.objectContaining({ slug, sourceKind: "author", relatedTasks: expect.arrayContaining([expect.objectContaining({ id: relatedTaskId })]) }),
     ]));
+  });
+
+  it("shows an editor-controlled school event only after an administrator activates it", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable for promo test");
+    const openId = `${suffix}-promo-admin`;
+    await db.insert(users).values({ openId, email: `${suffix}-promo-admin@example.test`, name: "Редактор событий", loginMethod: "test", role: "admin", lastSignedIn: new Date() });
+    const [created] = await db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1);
+    adminId = created?.id ?? null;
+    if (!adminId) throw new Error("Promo editor user was not created");
+    const adminCaller = appRouter.createCaller(createContext(testUser(adminId, openId, `${suffix}-promo-admin@example.test`, "Редактор событий", "admin")));
+    const input = { placement: "theory" as const, eyebrow: "Эфир Школы 911", title: "Открытый разбор планиметрии", description: "Собственный учебный эфир с разбором базовых задач по планиметрии.", ctaLabel: "Записаться", ctaUrl: "https://school911.example/events/geometry", isActive: false };
+    const createdPromo = await adminCaller.school.admin.createPromo(input);
+    temporaryPromoIds.push(createdPromo.promoId);
+    const publicCaller = appRouter.createCaller(createContext(null));
+    expect(await publicCaller.publicBank.activePromo({ placement: "theory" })).toBeNull();
+    await adminCaller.school.admin.updatePromo({ ...input, promoId: createdPromo.promoId, isActive: true });
+    await expect(publicCaller.publicBank.activePromo({ placement: "theory" })).resolves.toMatchObject({ id: createdPromo.promoId, title: input.title, ctaUrl: input.ctaUrl });
   });
 });

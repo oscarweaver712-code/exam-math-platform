@@ -73,7 +73,9 @@
 - [x] Verify the theory editor and expanded public learning flow on desktop and mobile, then save a checkpoint.
 - [x] Analyze the supplied public reference for reusable interaction principles without copying its design, code, or protected content.
 - [x] Add a transparent editorial-origin label to theory and task content that distinguishes author-created, licensed, and externally referenced materials.
-- [ ] Design a restrained in-product promotion block for the school’s own live lessons or streams, controllable by editors and never obscuring learning content.
+- [x] Design a restrained in-product promotion block for the school’s own live lessons or streams, controllable by editors and never obscuring learning content.
+- [x] Verify the public promo banner by interacting with the actual dismiss button in the user-facing UI, then confirm hidden state after dismissal in both themes.
+- [x] Save a new checkpoint after the verified promo-banner work.
 - [x] Define a multi-subject, multi-exam content workflow that keeps source registration, editorial review, publication, and student visibility deterministic.
 - [x] Add explicit wrong-role coverage for every administrative theory-editor procedure.
 - [x] Save a new checkpoint after the verified theory-editor and expanded content work.

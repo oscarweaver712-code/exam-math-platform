@@ -6,6 +6,7 @@ import {
   curriculumUnits,
   examTaskTypes,
   examTracks,
+  learningPromos,
   platformProfiles,
   savedTasks,
   subjects,
@@ -93,6 +94,16 @@ export const appRouter = router({
         .where(eq(examTaskTypes.examTrackId, track.id))
         .orderBy(asc(examTaskTypes.sortOrder));
       return { track, topics: topicRows, taskTypes, taskCount: taskRows.length, theoryCount: theoryRows.length };
+    }),
+    activePromo: publicProcedure.input(z.object({ placement: z.enum(["theory", "bank", "homework"]) })).query(async ({ input }) => {
+      const track = await getOgeTrack();
+      const now = Date.now();
+      const promos = await (await requireDb())
+        .select({ id: learningPromos.id, eyebrow: learningPromos.eyebrow, title: learningPromos.title, description: learningPromos.description, ctaLabel: learningPromos.ctaLabel, ctaUrl: learningPromos.ctaUrl, startsAt: learningPromos.startsAt, endsAt: learningPromos.endsAt })
+        .from(learningPromos)
+        .where(and(eq(learningPromos.examTrackId, track.id), eq(learningPromos.placement, input.placement), eq(learningPromos.isActive, true)))
+        .orderBy(asc(learningPromos.sortOrder));
+      return promos.find(promo => (!promo.startsAt || promo.startsAt <= now) && (!promo.endsAt || promo.endsAt >= now)) ?? null;
     }),
     listTasks: publicProcedure.input(publicFilters).query(async ({ input }) => {
       const track = await getOgeTrack();

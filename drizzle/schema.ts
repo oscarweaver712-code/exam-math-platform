@@ -245,6 +245,30 @@ export const theoryTaskTypes = mysqlTable(
   ],
 );
 
+/** A restrained, editor-controlled promotion for the school’s own learning events. */
+export const learningPromos = mysqlTable(
+  "learning_promos",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    examTrackId: int("examTrackId").references(() => examTracks.id, { onDelete: "cascade" }),
+    placement: mysqlEnum("placement", ["theory", "bank", "homework"]).default("theory").notNull(),
+    eyebrow: varchar("eyebrow", { length: 140 }).notNull(),
+    title: varchar("title", { length: 220 }).notNull(),
+    description: text("description").notNull(),
+    ctaLabel: varchar("ctaLabel", { length: 120 }).notNull(),
+    ctaUrl: varchar("ctaUrl", { length: 1024 }).notNull(),
+    isActive: boolean("isActive").default(false).notNull(),
+    startsAt: bigint("startsAt", { mode: "number" }),
+    endsAt: bigint("endsAt", { mode: "number" }),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    index("learning_promos_track_placement_active_idx").on(table.examTrackId, table.placement, table.isActive),
+  ],
+);
+
 /** A private completion marker for one user's theory unit. */
 export const userTheoryProgress = mysqlTable(
   "user_theory_progress",

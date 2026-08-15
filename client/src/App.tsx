@@ -12,6 +12,7 @@ import Workspace from "./pages/Workspace";
 import TutorWorkspace from "./pages/TutorWorkspace";
 import AdminTasks from "./pages/AdminTasks";
 import AdminTheory from "./pages/AdminTheory";
+import AdminPromos from "./pages/AdminPromos";
 import PracticeCenter from "./pages/PracticeCenter";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path={"/tutor"} component={TutorWorkspace} />
       <Route path={"/admin/tasks"} component={AdminTasks} />
       <Route path={"/admin/theory"} component={AdminTheory} />
+      <Route path={"/admin/promos"} component={AdminPromos} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
