@@ -52,3 +52,16 @@
 - [x] Make topic filters the primary discovery control in theory, including active-state feedback, result counts, and clear reset behaviour.
 - [x] Verify the renamed and expanded theory experience on desktop and mobile, then save a new checkpoint after tests pass.
 - [x] Save a checkpoint for the «Школа 911» branding and expanded ОГЭ theory collection after final tests and visual verification.
+- [x] Add a persistent per-user theory-progress model that records completed theory units without exposing it to unauthenticated visitors.
+- [x] Add an authenticated «Изучено» control to theory units and show a visual overall and topic-by-topic completion summary.
+- [x] Add a responsive search field that filters theory by title, rule, formula, and instructional content alongside the existing topic filters.
+- [x] Add a related-practice block to each theory unit with direct links to the mapped public tasks in the task bank.
+- [x] Add Vitest coverage for theory completion privacy, progress aggregation, search behaviour, and theory-to-practice links.
+- [x] Verify the new theory learning flow on desktop and mobile, then save a new checkpoint after tests pass.
+- [x] Add a persisted light/dark theme toggle to the global navigation and provide complete, accessible light and dark design tokens for public and authenticated screens.
+- [x] Verify key screens in both themes on desktop and mobile, then include the theme work in the final checkpoint.
+- [x] Add explicit assertions for total, completed, and topic-level aggregation in the theory-progress flow.
+- [x] Verify the light theme on public and authenticated routes, then replace any remaining contrast gaps with stable theme-aware styling.
+- [x] Verify mobile light/dark rendering for personal, tutor, and administrator workspaces.
+- [x] Replace remaining hardcoded dark surfaces on key role screens with reusable theme-aware surface and typography tokens.
+- [x] Save a new checkpoint after the verified theory and theme work.

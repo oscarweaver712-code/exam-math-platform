@@ -239,6 +239,26 @@ export const theoryTaskTypes = mysqlTable(
   ],
 );
 
+/** A private completion marker for one user's theory unit. */
+export const userTheoryProgress = mysqlTable(
+  "user_theory_progress",
+  {
+    userId: int("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    theoryUnitId: int("theoryUnitId")
+      .notNull()
+      .references(() => theoryUnits.id, { onDelete: "cascade" }),
+    completedAt: bigint("completedAt", { mode: "number" }).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    primaryKey({ columns: [table.userId, table.theoryUnitId] }),
+    index("user_theory_progress_theory_idx").on(table.theoryUnitId),
+  ],
+);
+
 export type TaskChoice = { id: string; label: string };
 
 /**

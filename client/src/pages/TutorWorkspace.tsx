@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
-const panel = "rounded-[24px] border border-white/10 bg-[#151518] p-5 sm:p-6";
+const panel = "theme-surface rounded-[24px] border p-5 sm:p-6";
 const orangeButton = "rounded-xl bg-[#ff5b14] font-extrabold text-[#101014] hover:bg-[#ff7a35]";
 
 export default function TutorWorkspace() {

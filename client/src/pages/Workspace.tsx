@@ -9,7 +9,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
-const panel = "rounded-2xl border border-white/10 bg-[#151518] p-5 sm:p-6";
+const panel = "theme-surface rounded-2xl border p-5 sm:p-6";
 
 export default function Workspace() {
   const { user, loading, isAuthenticated, logout } = useAuth();

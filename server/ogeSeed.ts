@@ -52,6 +52,34 @@ async function ensureTheorySeed(db: NonNullable<Awaited<ReturnType<typeof getDb>
   await db.insert(theoryTaskTypes).values(missing.map(([slug, , , , , kimNumber]) => ({ theoryUnitId: idFor(theoryIds, slug), examTaskTypeId: idFor(taskTypeIds, kimNumber) })));
 }
 
+async function ensureTheoryPracticeLinks(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const theoryRows = await db
+    .select({ theoryUnitId: theoryUnits.id, curriculumUnitId: theoryCurriculumUnits.curriculumUnitId, examTaskTypeId: theoryTaskTypes.examTaskTypeId })
+    .from(theoryExamTracks)
+    .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
+    .innerJoin(theoryCurriculumUnits, eq(theoryUnits.id, theoryCurriculumUnits.theoryUnitId))
+    .innerJoin(theoryTaskTypes, eq(theoryUnits.id, theoryTaskTypes.theoryUnitId))
+    .where(eq(theoryExamTracks.examTrackId, trackId));
+  const taskRows = await db
+    .select({ taskId: tasks.id, curriculumUnitId: taskCurriculumUnits.curriculumUnitId, examTaskTypeId: tasks.examTaskTypeId })
+    .from(tasks)
+    .innerJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
+    .where(eq(tasks.examTrackId, trackId));
+  const existing = await db.select({ taskId: taskTheoryUnits.taskId, theoryUnitId: taskTheoryUnits.theoryUnitId }).from(taskTheoryUnits);
+  const existingKeys = new Set(existing.map(row => `${row.taskId}:${row.theoryUnitId}`));
+  const values: Array<typeof taskTheoryUnits.$inferInsert> = [];
+  for (const theory of theoryRows) {
+    for (const task of taskRows) {
+      if (task.curriculumUnitId !== theory.curriculumUnitId || task.examTaskTypeId !== theory.examTaskTypeId) continue;
+      const key = `${task.taskId}:${theory.theoryUnitId}`;
+      if (existingKeys.has(key)) continue;
+      existingKeys.add(key);
+      values.push({ taskId: task.taskId, theoryUnitId: theory.theoryUnitId });
+    }
+  }
+  if (values.length) await db.insert(taskTheoryUnits).values(values);
+}
+
 function idFor(map: Map<string, number>, key: string) {
   const id = map.get(key);
   if (!id) throw new Error(`Seed reference is missing: ${key}`);
@@ -99,6 +127,7 @@ async function seedOgeData() {
     const [track] = await db.select({ id: examTracks.id }).from(examTracks).where(eq(examTracks.slug, "oge-mathematics")).limit(1);
     if (track) {
       await ensureTheorySeed(db, existing[0].id, track.id);
+      await ensureTheoryPracticeLinks(db, track.id);
       await ensureTaskVisualSeed(db, track.id);
     }
     return existing[0].id;
@@ -299,6 +328,7 @@ async function seedOgeData() {
       theoryUnitId: idFor(theoryIds, theorySlug),
     })),
   );
+  await ensureTheoryPracticeLinks(db, track.id);
   await ensureTaskVisualSeed(db, track.id);
 
   return subject.id;

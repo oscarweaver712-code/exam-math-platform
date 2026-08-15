@@ -18,6 +18,7 @@ import {
   theoryExamTracks,
   theoryTaskTypes,
   theoryUnits,
+  userTheoryProgress,
 } from "../drizzle/schema";
 import { checkPartOneAnswer } from "./answerValidation";
 import { canChooseInitialRole, isPartOneAutoCheckEligible } from "./learningPolicy";
@@ -186,15 +187,16 @@ export const appRouter = router({
         });
         return { checkStatus: result.isCorrect ? ("correct" as const) : ("incorrect" as const), ...result };
       }),
-    listTheory: publicProcedure.input(z.object({ subjectSlug: z.string().optional(), examTrackSlug: z.string().optional(), topicSlug: z.string().optional(), kimNumber: z.string().optional() })).query(async ({ input }) => {
+    listTheory: publicProcedure.input(z.object({ subjectSlug: z.string().optional(), examTrackSlug: z.string().optional(), topicSlug: z.string().optional(), kimNumber: z.string().optional(), search: z.string().trim().max(120).optional() })).query(async ({ input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       if ((input.subjectSlug && input.subjectSlug !== track.subjectSlug) || (input.examTrackSlug && input.examTrackSlug !== track.slug)) return [];
       const filters = [eq(theoryExamTracks.examTrackId, track.id), eq(theoryUnits.status, "published")];
       if (input.topicSlug) filters.push(eq(curriculumUnits.slug, input.topicSlug));
       if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
-      return db
+      const theoryRows = await db
         .select({
+          id: theoryUnits.id,
           slug: theoryUnits.slug,
           title: theoryUnits.title,
           lead: theoryUnits.lead,
@@ -214,6 +216,71 @@ export const appRouter = router({
         .innerJoin(examTracks, eq(theoryExamTracks.examTrackId, examTracks.id))
         .where(and(...filters))
         .orderBy(asc(theoryUnits.sortOrder));
+      const relatedRows = await db
+        .select({ theoryUnitId: taskTheoryUnits.theoryUnitId, id: tasks.id, slug: tasks.slug, title: tasks.title, kimNumber: examTaskTypes.kimNumber })
+        .from(taskTheoryUnits)
+        .innerJoin(tasks, eq(taskTheoryUnits.taskId, tasks.id))
+        .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+        .where(and(eq(tasks.examTrackId, track.id), eq(tasks.status, "published")));
+      const relatedByTheory = new Map<number, Array<{ id: number; slug: string; title: string; kimNumber: string }>>();
+      for (const row of relatedRows) {
+        const current = relatedByTheory.get(row.theoryUnitId) ?? [];
+        current.push({ id: row.id, slug: row.slug, title: row.title, kimNumber: row.kimNumber });
+        relatedByTheory.set(row.theoryUnitId, current);
+      }
+      const normalizedSearch = input.search?.toLocaleLowerCase("ru-RU");
+      return theoryRows
+        .filter(item => !normalizedSearch || `${item.title} ${item.lead} ${item.bodyMarkdown}`.toLocaleLowerCase("ru-RU").includes(normalizedSearch))
+        .map(item => ({ ...item, relatedTasks: relatedByTheory.get(item.id) ?? [] }));
+    }),
+  }),
+  theory: router({
+    progress: protectedProcedure.query(async ({ ctx }) => {
+      const track = await getOgeTrack();
+      const db = await requireDb();
+      const units = await db
+        .select({ id: theoryUnits.id, topicTitle: curriculumUnits.title, topicSlug: curriculumUnits.slug })
+        .from(theoryExamTracks)
+        .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
+        .innerJoin(theoryCurriculumUnits, eq(theoryUnits.id, theoryCurriculumUnits.theoryUnitId))
+        .innerJoin(curriculumUnits, eq(theoryCurriculumUnits.curriculumUnitId, curriculumUnits.id))
+        .where(and(eq(theoryExamTracks.examTrackId, track.id), eq(theoryUnits.status, "published")));
+      const completions = await db
+        .select({ theoryUnitId: userTheoryProgress.theoryUnitId, completedAt: userTheoryProgress.completedAt })
+        .from(userTheoryProgress)
+        .where(eq(userTheoryProgress.userId, ctx.user.id));
+      const completedById = new Map(completions.map(item => [item.theoryUnitId, item.completedAt]));
+      const topicMap = new Map<string, { topicSlug: string; topicTitle: string; total: number; completed: number }>();
+      for (const unit of units) {
+        const current = topicMap.get(unit.topicSlug) ?? { topicSlug: unit.topicSlug, topicTitle: unit.topicTitle, total: 0, completed: 0 };
+        current.total += 1;
+        if (completedById.has(unit.id)) current.completed += 1;
+        topicMap.set(unit.topicSlug, current);
+      }
+      return { completedTheoryUnitIds: Array.from(completedById.keys()), total: units.length, completed: units.filter(unit => completedById.has(unit.id)).length, byTopic: Array.from(topicMap.values()) };
+    }),
+    toggleCompletion: protectedProcedure.input(z.object({ theoryUnitId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const track = await getOgeTrack();
+      const db = await requireDb();
+      const [unit] = await db
+        .select({ id: theoryUnits.id })
+        .from(theoryExamTracks)
+        .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
+        .where(and(eq(theoryExamTracks.examTrackId, track.id), eq(theoryUnits.id, input.theoryUnitId), eq(theoryUnits.status, "published")))
+        .limit(1);
+      if (!unit) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      const [existing] = await db
+        .select({ theoryUnitId: userTheoryProgress.theoryUnitId })
+        .from(userTheoryProgress)
+        .where(and(eq(userTheoryProgress.userId, ctx.user.id), eq(userTheoryProgress.theoryUnitId, input.theoryUnitId)))
+        .limit(1);
+      if (existing) {
+        await db.delete(userTheoryProgress).where(and(eq(userTheoryProgress.userId, ctx.user.id), eq(userTheoryProgress.theoryUnitId, input.theoryUnitId)));
+        return { completed: false };
+      }
+      const timestamp = Date.now();
+      await db.insert(userTheoryProgress).values({ userId: ctx.user.id, theoryUnitId: input.theoryUnitId, completedAt: timestamp, createdAt: timestamp, updatedAt: timestamp });
+      return { completed: true };
     }),
   }),
   profile: router({

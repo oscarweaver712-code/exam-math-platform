@@ -69,9 +69,53 @@ describe("public bank and tutor homework flow", () => {
       expect.objectContaining({ slug: "fractions-and-order" }),
       expect.objectContaining({ slug: "unit-conversion" }),
     ]));
+    expect(theory.every(item => item.relatedTasks.length > 0)).toBe(true);
     const probabilityTheory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", topicSlug: "probability" });
     expect(probabilityTheory).toHaveLength(2);
     expect(probabilityTheory.every(item => item.topicTitle === "Вероятность")).toBe(true);
+    const searchResults = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", search: "вероятность" });
+    expect(searchResults).toEqual(expect.arrayContaining([expect.objectContaining({ slug: "classical-probability" })]));
+  });
+
+  it("keeps theory completion markers private to the authenticated learner", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable for theory progress test");
+    const now = Date.now();
+    const firstOpenId = `${suffix}-theory-first`;
+    const secondOpenId = `${suffix}-theory-second`;
+    await db.insert(users).values([
+      { openId: firstOpenId, email: `${suffix}-theory-first@example.test`, name: "Первый ученик", loginMethod: "test", role: "user", lastSignedIn: new Date() },
+      { openId: secondOpenId, email: `${suffix}-theory-second@example.test`, name: "Второй ученик", loginMethod: "test", role: "user", lastSignedIn: new Date() },
+    ]);
+    const [first] = await db.select({ id: users.id }).from(users).where(eq(users.openId, firstOpenId)).limit(1);
+    const [second] = await db.select({ id: users.id }).from(users).where(eq(users.openId, secondOpenId)).limit(1);
+    tutorId = first?.id ?? null;
+    studentId = second?.id ?? null;
+    if (!tutorId || !studentId) throw new Error("Theory test users were not created");
+    await db.insert(platformProfiles).values([
+      { userId: tutorId, learningRole: "student", displayName: "Первый ученик", roleChosenAt: now, createdAt: now, updatedAt: now },
+      { userId: studentId, learningRole: "student", displayName: "Второй ученик", roleChosenAt: now, createdAt: now, updatedAt: now },
+    ]);
+    const firstCaller = appRouter.createCaller(createContext(testUser(tutorId, firstOpenId, `${suffix}-theory-first@example.test`, "Первый ученик")));
+    const secondCaller = appRouter.createCaller(createContext(testUser(studentId, secondOpenId, `${suffix}-theory-second@example.test`, "Второй ученик")));
+    const units = await firstCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
+    const theoryUnit = units[0];
+    if (!theoryUnit) throw new Error("Theory unit unavailable");
+    await expect(appRouter.createCaller(createContext(null)).theory.progress()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await firstCaller.theory.toggleCompletion({ theoryUnitId: theoryUnit.id })).toEqual({ completed: true });
+    const firstProgress = await firstCaller.theory.progress();
+    expect(firstProgress.completedTheoryUnitIds).toContain(theoryUnit.id);
+    expect(firstProgress).toMatchObject({ total: 13, completed: 1 });
+    expect(firstProgress.byTopic).toEqual(expect.arrayContaining([
+      expect.objectContaining({ topicSlug: "calculations-percentages", total: 3, completed: 1 }),
+    ]));
+    expect((await secondCaller.theory.progress()).completedTheoryUnitIds).not.toContain(theoryUnit.id);
+    expect(await firstCaller.theory.toggleCompletion({ theoryUnitId: theoryUnit.id })).toEqual({ completed: false });
+    const resetProgress = await firstCaller.theory.progress();
+    expect(resetProgress).toMatchObject({ total: 13, completed: 0 });
+    expect(resetProgress.byTopic).toEqual(expect.arrayContaining([
+      expect.objectContaining({ topicSlug: "calculations-percentages", total: 3, completed: 0 }),
+    ]));
   });
 
   it("creates homework only for an active tutor–student link and stores its items", async () => {

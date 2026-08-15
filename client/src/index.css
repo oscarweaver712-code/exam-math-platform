@@ -31,6 +31,15 @@
 
 :root {
   --radius: 0.9rem;
+  --app-page: #0b0b0d;
+  --app-surface: #151518;
+  --app-inset: #101012;
+  --app-foreground: #f5f0e9;
+  --app-muted: #aaa7ae;
+  --app-border: rgba(255,255,255,.1);
+  --app-field: #17171b;
+  --app-field-border: rgba(255,255,255,.14);
+  --app-placeholder: #77757c;
   --background: oklch(0.12 0.006 286);
   --foreground: oklch(0.95 0.01 80);
   --card: oklch(0.17 0.008 286);
@@ -67,8 +76,8 @@
   ::selection { background: #ff5b14; color: #0b0b0d; }
   button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [type="button"]:not(:disabled), [type="submit"]:not(:disabled), a[href], select:not(:disabled), input[type="checkbox"]:not(:disabled), input[type="radio"]:not(:disabled) { cursor: pointer; }
   button:not(:disabled):active, a[href]:active { transform: scale(0.975); }
-  input, textarea, select { background: #17171b !important; color: #f6f2ed !important; border-color: rgba(255,255,255,.14) !important; }
-  input::placeholder, textarea::placeholder { color: #77757c !important; }
+  input, textarea, select { background: var(--app-field) !important; color: var(--app-foreground) !important; border-color: var(--app-field-border) !important; }
+  input::placeholder, textarea::placeholder { color: var(--app-placeholder) !important; }
 }
 
 @layer components {
@@ -109,3 +118,57 @@
 .admin-console textarea { background-color: #101012 !important; }
 .admin-console .border-\[\#2c668f\] { border-color: #ff5b14 !important; }
 .admin-console .bg-\[\#f2f7fa\] { background-color: rgba(255,91,20,.1) !important; }
+
+/* Light mode preserves the orange signal colour while replacing obsidian surfaces with warm paper. */
+html:not(.dark) { background: #fffaf4; color-scheme: light; }
+html:not(.dark) {
+  --background: oklch(0.985 0.012 82);
+  --foreground: oklch(0.2 0.012 72);
+  --card: oklch(0.995 0.008 84);
+  --card-foreground: oklch(0.2 0.012 72);
+  --popover: oklch(0.995 0.008 84);
+  --popover-foreground: oklch(0.2 0.012 72);
+  --secondary: oklch(0.95 0.018 72);
+  --secondary-foreground: oklch(0.25 0.012 72);
+  --muted: oklch(0.94 0.018 72);
+  --muted-foreground: oklch(0.46 0.018 72);
+  --accent: oklch(0.92 0.04 62);
+  --accent-foreground: oklch(0.23 0.012 72);
+  --border: oklch(0.84 0.018 72);
+  --input: oklch(0.84 0.018 72);
+  --app-page: #fffaf4;
+  --app-surface: #fffdf9;
+  --app-inset: #f7f0e8;
+  --app-foreground: #241f1a;
+  --app-muted: #625b53;
+  --app-border: rgba(74,61,50,.14);
+  --app-field: #fffdf9;
+  --app-field-border: #ded6cb;
+  --app-placeholder: #8a8178;
+}
+html:not(.dark) body { background: #fffaf4; color: #201f1c; }
+html:not(.dark) .app-header { background: rgba(255,250,244,.88) !important; border-color: rgba(63,52,42,.12) !important; }
+html:not(.dark) input, html:not(.dark) textarea, html:not(.dark) select { background: #fffdf9 !important; color: #26231f !important; border-color: #ded6cb !important; }
+html:not(.dark) input::placeholder, html:not(.dark) textarea::placeholder { color: #8a8178 !important; }
+html:not(.dark) .bg-\[\#0b0b0d\], html:not(.dark) .bg-\[\#0f0f12\] { background-color: var(--app-page) !important; }
+html:not(.dark) .bg-\[\#151518\], html:not(.dark) .bg-\[\#17171b\], html:not(.dark) .bg-\[\#161619\] { background-color: var(--app-surface) !important; }
+html:not(.dark) .bg-\[\#101012\], html:not(.dark) .bg-\[\#0e0e10\], html:not(.dark) .bg-\[\#111114\], html:not(.dark) .bg-\[\#19191d\] { background-color: var(--app-inset) !important; }
+html:not(.dark) .bg-white { background-color: var(--app-surface) !important; }
+html:not(.dark) .bg-\[\#eff6fa\], html:not(.dark) .bg-\[\#e9f2f8\], html:not(.dark) .bg-\[\#202025\] { background-color: var(--muted) !important; }
+html:not(.dark) .text-\[\#f5f0e9\], html:not(.dark) .text-\[\#f7f2eb\], html:not(.dark) .text-\[\#f6f2ed\], html:not(.dark) .text-slate-950, html:not(.dark) .text-slate-900, html:not(.dark) .text-slate-800 { color: var(--app-foreground) !important; }
+html:not(.dark) .text-\[\#aaa7ae\], html:not(.dark) .text-\[\#b9b6bc\], html:not(.dark) .text-\[\#a8a5ac\], html:not(.dark) .text-\[\#d3cec7\], html:not(.dark) .text-\[\#c7c3ca\], html:not(.dark) .text-slate-700, html:not(.dark) .text-slate-600 { color: var(--app-muted) !important; }
+html:not(.dark) .text-\[\#77747b\], html:not(.dark) .text-\[\#89868d\], html:not(.dark) .text-\[\#8e8b91\], html:not(.dark) .text-\[\#a7a4aa\], html:not(.dark) .text-slate-500, html:not(.dark) .text-slate-400 { color: var(--muted-foreground) !important; }
+html:not(.dark) .border-white\/10, html:not(.dark) .border-white\/9, html:not(.dark) .border-white\/8, html:not(.dark) .border-white\/12, html:not(.dark) .border-white\/14, html:not(.dark) .border-white\/18, html:not(.dark) .border-slate-200, html:not(.dark) .border-slate-100 { border-color: var(--app-border) !important; }
+html:not(.dark) .bg-white\/4, html:not(.dark) .bg-white\/5, html:not(.dark) .bg-white\/6, html:not(.dark) .bg-white\/7, html:not(.dark) .bg-white\/8, html:not(.dark) .bg-white\/10 { background-color: rgba(67,54,43,.055) !important; }
+html:not(.dark) .obsidian-grid { background-image: linear-gradient(rgba(87,67,48,.075) 1px, transparent 1px), linear-gradient(90deg, rgba(87,67,48,.075) 1px, transparent 1px); }
+html:not(.dark) .surface-card { background: linear-gradient(145deg, #fffdf9, #f5ede4); border-color: rgba(74,61,50,.14); box-shadow: 0 18px 42px rgba(78,52,28,.08); }
+html:not(.dark) .orange-glow { box-shadow: 0 0 0 1px rgba(255,91,20,.35), 0 18px 50px rgba(255,91,20,.12); }
+html:not(.dark) .text-white, html:not(.dark) .hover\:text-white:hover { color: #241f1a !important; }
+html:not(.dark) .admin-console input, html:not(.dark) .admin-console textarea, html:not(.dark) .admin-console select,
+html:not(.dark) .tutor-console input, html:not(.dark) .tutor-console textarea, html:not(.dark) .tutor-console select,
+html:not(.dark) .bg-\[\#101012\] input, html:not(.dark) .bg-\[\#101012\] textarea, html:not(.dark) .bg-\[\#101012\] select { background-color: #fffdf9 !important; color: #26231f !important; border-color: #ded6cb !important; }
+.theme-page { background-color: var(--app-page); color: var(--app-foreground); }
+.theme-surface { background-color: var(--app-surface); border-color: var(--app-border); }
+.theme-inset { background-color: var(--app-inset); border-color: var(--app-border); }
+.theme-muted { color: var(--app-muted); }
+.theme-foreground { color: var(--app-foreground); }
