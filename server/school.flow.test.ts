@@ -63,6 +63,15 @@ describe("public bank and tutor homework flow", () => {
     expect(geometryTask.visuals).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "inline_svg", diagramKey: "triangle-angle-48-67" }),
     ]));
+    const theory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
+    expect(theory).toHaveLength(13);
+    expect(theory).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slug: "fractions-and-order" }),
+      expect.objectContaining({ slug: "unit-conversion" }),
+    ]));
+    const probabilityTheory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", topicSlug: "probability" });
+    expect(probabilityTheory).toHaveLength(2);
+    expect(probabilityTheory.every(item => item.topicTitle === "Вероятность")).toBe(true);
   });
 
   it("creates homework only for an active tutor–student link and stores its items", async () => {

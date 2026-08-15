@@ -47,3 +47,8 @@
 - [x] Fully redesign administrator task editor panels, content-list states, and actions directly in the obsidian-orange component system.
 - [x] Re-verify tutor and administrator flows on desktop and mobile after the direct component-level redesign.
 - [x] Save a new checkpoint for the redesigned obsidian-orange version after final type checking, tests, and visual verification.
+- [x] Rename the application brand, page metadata, public navigation, and footer to «Школа 911» while retaining the OГЭ mathematics context.
+- [x] Expand the ОГЭ mathematics theory collection with foundational materials structured as rule, formula, algorithm, common mistake, and related practice.
+- [x] Make topic filters the primary discovery control in theory, including active-state feedback, result counts, and clear reset behaviour.
+- [x] Verify the renamed and expanded theory experience on desktop and mobile, then save a new checkpoint after tests pass.
+- [x] Save a checkpoint for the «Школа 911» branding and expanded ОГЭ theory collection after final tests and visual verification.
