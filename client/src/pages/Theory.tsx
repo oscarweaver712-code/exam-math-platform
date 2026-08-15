@@ -13,46 +13,5 @@ export default function Theory() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const overview = trpc.publicBank.overview.useQuery();
   const theory = trpc.publicBank.listTheory.useQuery({ subjectSlug, examTrackSlug, topicSlug, kimNumber });
-
-  return (
-    <div className="min-h-screen bg-[#fbfaf7]">
-      <PlatformHeader />
-      <main className="container py-9 sm:py-14">
-        <div className="grid gap-8 lg:grid-cols-[0.9fr_1.6fr] lg:gap-14">
-          <aside className="lg:sticky lg:top-24 lg:h-fit">
-            <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#2c668f]">База знаний</p>
-            <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.055em] text-slate-950">Теория ОГЭ</h1>
-            <p className="mt-4 text-base leading-7 text-slate-600">Короткие опорные конспекты: правило, алгоритм, частая ошибка и связь с заданиями КИМ.</p>
-            <div className="mt-6 grid gap-3 rounded-2xl border border-[#dce8ef] bg-[#f5f9fb] p-4">
-              <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Предмет<select value={subjectSlug ?? ""} onChange={event => setSubjectSlug(event.target.value || undefined)} className="mt-1.5 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-700"><option value="">Все предметы</option><option value="mathematics">Математика</option></select></label>
-              <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Траектория<select value={examTrackSlug ?? ""} onChange={event => setExamTrackSlug(event.target.value || undefined)} className="mt-1.5 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-700"><option value="">Все экзамены</option><option value="oge-mathematics">ОГЭ по математике</option></select></label>
-              <label className="text-xs font-extrabold uppercase tracking-[0.12em] text-slate-500">Номер КИМ<select value={kimNumber ?? ""} onChange={event => setKimNumber(event.target.value || undefined)} className="mt-1.5 flex h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm font-bold text-slate-700"><option value="">Все номера</option>{overview.data?.taskTypes.map(item => <option key={item.kimNumber} value={item.kimNumber}>КИМ {item.kimNumber}</option>)}</select></label>
-            </div>
-            <div className="mt-7 flex flex-wrap gap-2 lg:flex-col lg:items-stretch">
-              <Button variant={!topicSlug ? "default" : "outline"} onClick={() => setTopicSlug(undefined)} className="justify-start rounded-lg">Все разделы</Button>
-              {overview.data?.topics.map(topic => <Button key={topic.slug} variant={topicSlug === topic.slug ? "default" : "outline"} onClick={() => setTopicSlug(topicSlug === topic.slug ? undefined : topic.slug)} className="justify-start rounded-lg text-left">{topic.title}</Button>)}
-            </div>
-          </aside>
-          <section>
-            <div className="mb-5 flex items-center gap-2 text-sm font-bold text-slate-500"><BookMarked className="h-4 w-4 text-[#b88318]" /> {theory.data?.length ?? 0} опорных конспектов</div>
-            {theory.isLoading ? <div className="grid min-h-52 place-items-center"><Loader2 className="h-7 w-7 animate-spin text-[#2c668f]" /></div> : null}
-            <div className="space-y-3">
-              {theory.data?.map(item => {
-                const isOpen = expanded === item.slug;
-                return (
-                  <article key={item.slug} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <button type="button" onClick={() => setExpanded(isOpen ? null : item.slug)} className="flex w-full items-start justify-between gap-4 p-5 text-left">
-                      <div><div className="flex flex-wrap gap-2"><Badge className="bg-[#e9f2f8] text-[#225a82] hover:bg-[#e9f2f8]">{item.topicTitle}</Badge><Badge variant="outline">КИМ {item.kimNumber}</Badge></div><h2 className="mt-3 text-xl font-extrabold tracking-[-0.03em] text-slate-950">{item.title}</h2><p className="mt-2 text-sm leading-6 text-slate-600">{item.lead}</p></div>
-                      <ChevronDown className={`mt-1 h-5 w-5 shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-                    </button>
-                    {isOpen ? <div className="border-t border-slate-100 px-5 py-5"><div className="whitespace-pre-line text-sm leading-7 text-slate-700">{item.bodyMarkdown.replace(/## /g, "").replace(/\*\*/g, "")}</div></div> : null}
-                  </article>
-                );
-              })}
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
-  );
+  return <div className="min-h-screen bg-[#0b0b0d] text-[#f5f0e9]"><PlatformHeader /><main className="container py-10 sm:py-16"><div className="grid gap-10 lg:grid-cols-[350px_minmax(0,1fr)] lg:gap-16"><aside className="lg:sticky lg:top-24 lg:h-fit"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">База знаний</p><h1 className="mt-4 text-5xl font-bold leading-[.94] tracking-[-.065em]">Теория,<br /><span className="text-[#ff5b14]">не шум.</span></h1><p className="mt-5 leading-7 text-[#aaa7ae]">Короткие конспекты для точного повторения: правило, алгоритм и типичная ошибка рядом с заданиями КИМ.</p><div className="mt-8 rounded-2xl border border-white/10 bg-[#151518] p-4"><label className="block text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Предмет<select value={subjectSlug ?? ""} onChange={event => setSubjectSlug(event.target.value || undefined)} className="mt-2 h-10 w-full rounded-lg px-3 text-sm font-bold"><option value="">Все предметы</option><option value="mathematics">Математика</option></select></label><label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Траектория<select value={examTrackSlug ?? ""} onChange={event => setExamTrackSlug(event.target.value || undefined)} className="mt-2 h-10 w-full rounded-lg px-3 text-sm font-bold"><option value="">Все экзамены</option><option value="oge-mathematics">ОГЭ по математике</option></select></label><label className="mt-4 block text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Номер КИМ<select value={kimNumber ?? ""} onChange={event => setKimNumber(event.target.value || undefined)} className="mt-2 h-10 w-full rounded-lg px-3 text-sm font-bold"><option value="">Все номера</option>{overview.data?.taskTypes.map(item => <option key={item.kimNumber} value={item.kimNumber}>КИМ {item.kimNumber}</option>)}</select></label></div><div className="mt-5 flex flex-wrap gap-2 lg:flex-col lg:items-stretch"><Button variant={!topicSlug ? "default" : "outline"} onClick={() => setTopicSlug(undefined)} className={`justify-start rounded-xl font-bold ${!topicSlug ? "bg-[#ff5b14] text-[#101014] hover:bg-[#ff7a35]" : "border-white/12 bg-white/4 text-[#d5d0c9] hover:bg-white/9 hover:text-white"}`}>Все разделы</Button>{overview.data?.topics.map(topic => <Button key={topic.slug} variant="outline" onClick={() => setTopicSlug(topicSlug === topic.slug ? undefined : topic.slug)} className={`justify-start rounded-xl text-left font-bold ${topicSlug === topic.slug ? "border-[#ff5b14] bg-[#ff5b14] text-[#101014] hover:bg-[#ff7a35]" : "border-white/12 bg-white/4 text-[#d5d0c9] hover:bg-white/9 hover:text-white"}`}>{topic.title}</Button>)}</div></aside><section><div className="mb-6 flex items-center gap-2 border-b border-white/9 pb-5 text-sm font-bold text-[#aaa7ae]"><BookMarked className="h-4 w-4 text-[#ff5b14]" /> <span className="font-['Space_Grotesk'] text-2xl text-[#ff7a35]">{theory.data?.length ?? 0}</span> опорных конспектов</div>{theory.isLoading ? <div className="grid min-h-52 place-items-center"><Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /></div> : <div className="space-y-3">{theory.data?.map((item, index) => { const isOpen = expanded === item.slug; return <article key={item.slug} className={`overflow-hidden rounded-2xl border transition ${isOpen ? "border-[#ff5b14]/55 bg-[#19191d]" : "border-white/9 bg-[#151518] hover:border-white/20"}`}><button type="button" onClick={() => setExpanded(isOpen ? null : item.slug)} className="flex w-full items-start justify-between gap-4 p-5 text-left sm:p-6"><div><div className="flex flex-wrap items-center gap-2"><span className="font-['Space_Grotesk'] text-xs font-bold text-[#ff5b14]">0{index + 1}</span><Badge className="border-0 bg-white/7 text-[#c7c3ca] hover:bg-white/7">{item.topicTitle}</Badge><Badge variant="outline" className="border-white/12 text-[#aaa7ae]">КИМ {item.kimNumber}</Badge></div><h2 className="mt-4 text-2xl font-bold tracking-[-.04em] text-[#f5f0e9]">{item.title}</h2><p className="mt-2 text-sm leading-6 text-[#aaa7ae]">{item.lead}</p></div><ChevronDown className={`mt-1 h-5 w-5 shrink-0 text-[#ff7a35] transition-transform ${isOpen ? "rotate-180" : ""}`} /></button>{isOpen ? <div className="border-t border-white/8 bg-[#101012] px-5 py-6 sm:px-6"><div className="whitespace-pre-line text-sm leading-7 text-[#d3cec7]">{item.bodyMarkdown.replace(/## /g, "").replace(/\*\*/g, "")}</div></div> : null}</article>; })}</div>}</section></div></main></div>;
 }

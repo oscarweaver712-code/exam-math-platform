@@ -7,6 +7,7 @@ import {
   taskCurriculumUnits,
   tasks,
   taskTheoryUnits,
+  taskVisuals,
   theoryCurriculumUnits,
   theoryExamTracks,
   theoryTaskTypes,
@@ -21,6 +22,27 @@ function idFor(map: Map<string, number>, key: string) {
   const id = map.get(key);
   if (!id) throw new Error(`Seed reference is missing: ${key}`);
   return id;
+}
+
+async function ensureTaskVisualSeed(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const visualSeed = [
+    ["triangle-angle", "triangle-angle-48-67", "Схема треугольника с углами 48 и 67 градусов у основания."],
+    ["isosceles-angle", "isosceles-40", "Схема равнобедренного треугольника с углом 40 градусов при вершине."],
+    ["function-value", "function-line-3x-minus-2", "Координатная плоскость с графиком прямой y равно 3x минус 2 и отмеченной точкой при x равно 4."],
+    ["train-speed", "rate-time-distance-180-3", "Схема движения поезда: пройденное расстояние 180 километров за 3 часа."],
+  ] as const;
+  const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
+  const existing = await db.select({ taskId: taskVisuals.taskId, diagramKey: taskVisuals.diagramKey }).from(taskVisuals);
+  const existingKeys = new Set(existing.map(row => `${row.taskId}:${row.diagramKey ?? ""}`));
+  const timestamp = now();
+  const values: Array<typeof taskVisuals.$inferInsert> = [];
+  for (const [slug, diagramKey, altText] of visualSeed) {
+    const taskId = taskIds.get(slug);
+    if (!taskId || existingKeys.has(`${taskId}:${diagramKey}`)) continue;
+    values.push({ taskId, kind: "inline_svg", placement: "statement", diagramKey, altText, sourceKind: "author", reviewStatus: "approved", sortOrder: values.length, createdAt: timestamp, updatedAt: timestamp });
+  }
+  if (values.length) await db.insert(taskVisuals).values(values);
 }
 
 let seedPromise: Promise<number | null> | null = null;
@@ -39,7 +61,11 @@ async function seedOgeData() {
     .where(eq(subjects.slug, "mathematics"))
     .limit(1);
 
-  if (existing[0]) return existing[0].id;
+  if (existing[0]) {
+    const [track] = await db.select({ id: examTracks.id }).from(examTracks).where(eq(examTracks.slug, "oge-mathematics")).limit(1);
+    if (track) await ensureTaskVisualSeed(db, track.id);
+    return existing[0].id;
+  }
 
   const timestamp = now();
   await db.insert(subjects).values({
@@ -285,6 +311,7 @@ async function seedOgeData() {
       theoryUnitId: idFor(theoryIds, theorySlug),
     })),
   );
+  await ensureTaskVisualSeed(db, track.id);
 
   return subject.id;
 }

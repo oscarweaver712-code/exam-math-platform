@@ -290,6 +290,37 @@ export const tasks = mysqlTable(
   ],
 );
 
+/**
+ * Ordered visual materials belonging to a task. Inline SVG diagrams are
+ * referenced by a controlled component key, while image assets are served
+ * from object storage after source and editorial review.
+ */
+export const taskVisuals = mysqlTable(
+  "task_visuals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    taskId: int("taskId")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    kind: mysqlEnum("kind", ["inline_svg", "image_asset"]).notNull(),
+    placement: mysqlEnum("placement", ["statement", "solution"]).default("statement").notNull(),
+    diagramKey: varchar("diagramKey", { length: 120 }),
+    assetUrl: varchar("assetUrl", { length: 2048 }),
+    altText: text("altText").notNull(),
+    caption: varchar("caption", { length: 500 }),
+    sourceKind: mysqlEnum("sourceKind", ["author", "external"]).default("author").notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 2048 }),
+    reviewStatus: mysqlEnum("reviewStatus", ["draft", "review", "approved", "rejected"]).default("draft").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    index("task_visuals_task_placement_idx").on(table.taskId, table.placement, table.sortOrder),
+    index("task_visuals_review_idx").on(table.reviewStatus),
+  ],
+);
+
 export const taskCurriculumUnits = mysqlTable(
   "task_curriculum_units",
   {

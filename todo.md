@@ -35,3 +35,15 @@
 - [x] Add focused Vitest coverage for published-only public-bank access and the tutor homework-assignment flow.
 - [x] Add integration tests that real tutor, student and administrator procedures reject unauthenticated or wrong-role callers.
 - [x] Add integration tests proving draft and review tasks are excluded from public bank list and detail routes.
+- [x] Replace the current navy-and-gold visual system with an obsidian foundation, high-energy orange accent, elevated typography, and accessible contrast tokens.
+- [x] Redesign the public homepage, task bank, theory, task detail, and personal-practice screens around the new high-contrast editorial style.
+- [x] Restyle student, tutor, and administrator workspaces so they feel like one intentional product rather than inherited dashboard surfaces.
+- [x] Verify the redesigned system on desktop and mobile, then save an updated checkpoint after tests pass.
+- [x] Extend task content with a visual-asset model covering asset kind, source, alt text, display order, rendering mode, and editorial status.
+- [x] Build an accessible task-visual renderer that supports inline SVG mathematics diagrams and reviewed external image assets.
+- [x] Add representative author-created visual tasks to validate geometry, coordinate-plane, graph, and practical-diagram layouts in the redesign.
+- [x] Seed and visually verify an approved practical-context SVG scheme on a public task route.
+- [x] Fully redesign tutor workspace cards, forms, permissions states, and assignment hierarchy directly in the obsidian-orange component system.
+- [x] Fully redesign administrator task editor panels, content-list states, and actions directly in the obsidian-orange component system.
+- [x] Re-verify tutor and administrator flows on desktop and mobile after the direct component-level redesign.
+- [x] Save a new checkpoint for the redesigned obsidian-orange version after final type checking, tests, and visual verification.

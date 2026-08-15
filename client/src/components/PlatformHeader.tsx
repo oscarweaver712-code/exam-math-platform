@@ -5,61 +5,14 @@ import { BookOpenCheck, Menu, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 const links = [
-  { href: "/bank", label: "Задания" },
+  { href: "/bank", label: "Банк" },
   { href: "/theory", label: "Теория" },
   { href: "/practice", label: "Практика" },
-  { href: "/workspace", label: "Мой тренажёр" },
+  { href: "/workspace", label: "Кабинет" },
 ];
 
 export function PlatformHeader() {
   const { isAuthenticated, loading, user } = useAuth();
   const [location] = useLocation();
-
-  return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-[#fbfaf7]/92 backdrop-blur-xl">
-      <div className="container flex h-[72px] items-center justify-between gap-4">
-        <Link href="/" className="group flex items-center gap-3 text-slate-950">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-[#0d2945] shadow-[0_6px_18px_rgba(13,41,69,0.18)] transition-transform duration-200 group-hover:scale-105">
-            <BookOpenCheck className="h-5 w-5 text-[#e9c46a]" strokeWidth={2.4} />
-          </span>
-          <span className="leading-none">
-            <span className="block text-[15px] font-extrabold tracking-[-0.04em]">Математика</span>
-            <span className="mt-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Открытая школа</span>
-          </span>
-        </Link>
-
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Основная навигация">
-          {[...links, ...(user?.role === "admin" ? [{ href: "/admin/tasks", label: "Контент" }] : [])].map(link => {
-            const active = location === link.href || (link.href === "/bank" && location.startsWith("/bank/"));
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-200/70 hover:text-slate-950"}`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="flex items-center gap-2">
-          <Link href="/workspace" className="hidden sm:block">
-            <Button variant={isAuthenticated ? "secondary" : "default"} size="sm" disabled={loading} className="gap-2 rounded-lg font-bold">
-              <UserRound className="h-4 w-4" />
-              {isAuthenticated ? "Кабинет" : "Войти"}
-            </Button>
-          </Link>
-          {!isAuthenticated && !loading ? (
-            <Button onClick={startLogin} size="sm" className="hidden rounded-lg bg-[#e9c46a] font-extrabold text-[#0d2945] hover:bg-[#f0d68b] sm:inline-flex">
-              Создать профиль
-            </Button>
-          ) : null}
-          <Button variant="ghost" size="icon" className="md:hidden" asChild>
-            <Link href="/bank" aria-label="Открыть задания"><Menu className="h-5 w-5" /></Link>
-          </Button>
-        </div>
-      </div>
-    </header>
-  );
+  return <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0b0b0d]/85 backdrop-blur-xl"><div className="container flex h-[74px] items-center justify-between gap-4"><Link href="/" className="group flex items-center gap-3 text-[#f7f2eb]"><span className="grid h-10 w-10 place-items-center rounded-xl bg-[#ff5b14] shadow-[0_0_32px_rgba(255,91,20,.33)] transition-transform duration-200 group-hover:rotate-[-6deg] group-hover:scale-105"><BookOpenCheck className="h-5 w-5 text-[#101014]" strokeWidth={2.7} /></span><span className="leading-none"><span className="block font-['Space_Grotesk'] text-[15px] font-bold tracking-[-0.05em]">Математика</span><span className="mt-1 block text-[9px] font-extrabold uppercase tracking-[0.22em] text-[#8e8b91]">Открытая школа</span></span></Link><nav className="hidden items-center gap-1 md:flex" aria-label="Основная навигация">{[...links, ...(user?.role === "admin" ? [{ href: "/admin/tasks", label: "Контент" }] : [])].map(link => { const active = location === link.href || (link.href === "/bank" && location.startsWith("/bank/")); return <Link key={link.href} href={link.href} className={`rounded-lg px-3 py-2 text-sm font-bold transition-colors ${active ? "bg-[#ff5b14] text-[#101014]" : "text-[#a7a4aa] hover:bg-white/8 hover:text-white"}`}>{link.label}</Link>; })}</nav><div className="flex items-center gap-2"><Link href="/workspace" className="hidden sm:block"><Button variant="secondary" size="sm" disabled={loading} className="gap-2 rounded-lg border border-white/12 bg-white/6 font-bold text-[#f5f0e9] hover:bg-white/10"><UserRound className="h-4 w-4" />{isAuthenticated ? "Кабинет" : "Войти"}</Button></Link>{!isAuthenticated && !loading ? <Button onClick={startLogin} size="sm" className="hidden rounded-lg bg-[#ff5b14] font-extrabold text-[#111113] hover:bg-[#ff7a35] sm:inline-flex">Начать</Button> : null}<Button variant="ghost" size="icon" className="text-[#f5f0e9] hover:bg-white/10 hover:text-white md:hidden" asChild><Link href="/bank" aria-label="Открыть задания"><Menu className="h-5 w-5" /></Link></Button></div></div></header>;
 }

@@ -12,6 +12,7 @@ import {
   taskAttempts,
   taskCurriculumUnits,
   taskTheoryUnits,
+  taskVisuals,
   tasks,
   theoryCurriculumUnits,
   theoryExamTracks,
@@ -150,7 +151,12 @@ export const appRouter = router({
         .from(taskTheoryUnits)
         .innerJoin(theoryUnits, eq(taskTheoryUnits.theoryUnitId, theoryUnits.id))
         .where(and(eq(taskTheoryUnits.taskId, task.id), eq(theoryUnits.status, "published")));
-      return { ...task, relatedTheory };
+      const visuals = await db
+        .select({ id: taskVisuals.id, kind: taskVisuals.kind, placement: taskVisuals.placement, diagramKey: taskVisuals.diagramKey, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption })
+        .from(taskVisuals)
+        .where(and(eq(taskVisuals.taskId, task.id), eq(taskVisuals.reviewStatus, "approved")))
+        .orderBy(asc(taskVisuals.sortOrder));
+      return { ...task, relatedTheory, visuals };
     }),
     checkAnswer: publicProcedure
       .input(z.object({ taskId: z.number().int().positive(), rawAnswer: z.string().min(1).max(1024) }))

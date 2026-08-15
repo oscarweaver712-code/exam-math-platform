@@ -59,6 +59,10 @@ describe("public bank and tutor homework flow", () => {
     const details = await caller.publicBank.getTask({ slug: listing[0].slug });
     expect(details.title).toBe(listing[0].title);
     expect(details.part).toBe("part1");
+    const geometryTask = await caller.publicBank.getTask({ slug: "triangle-angle" });
+    expect(geometryTask.visuals).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "inline_svg", diagramKey: "triangle-angle-48-67" }),
+    ]));
   });
 
   it("creates homework only for an active tutor–student link and stores its items", async () => {

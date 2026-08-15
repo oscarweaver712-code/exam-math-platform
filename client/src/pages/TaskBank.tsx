@@ -8,6 +8,10 @@ import { useState } from "react";
 
 const difficultyLabel = { basic: "Базовый", standard: "Стандарт", advanced: "Повышенный" };
 
+function FilterPill({ active, children, onClick }: { active: boolean; children: React.ReactNode; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className={`rounded-lg border px-3 py-2 text-xs font-extrabold transition ${active ? "border-[#ff5b14] bg-[#ff5b14] text-[#101014]" : "border-white/10 bg-white/5 text-[#aba7ae] hover:border-white/25 hover:bg-white/9 hover:text-white"}`}>{children}</button>;
+}
+
 export default function TaskBank() {
   const [topicSlug, setTopicSlug] = useState<string | undefined>();
   const [difficulty, setDifficulty] = useState<"basic" | "standard" | "advanced" | undefined>();
@@ -15,71 +19,5 @@ export default function TaskBank() {
   const [kimNumber, setKimNumber] = useState<string | undefined>();
   const overview = trpc.publicBank.overview.useQuery();
   const tasks = trpc.publicBank.listTasks.useQuery({ topicSlug, difficulty, part, kimNumber });
-
-  return (
-    <div className="min-h-screen bg-[#fbfaf7]">
-      <PlatformHeader />
-      <main className="container py-9 sm:py-14">
-        <div className="max-w-3xl">
-          <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#2c668f]">Открытый банк</p>
-          <h1 className="mt-3 text-4xl font-extrabold tracking-[-0.055em] text-slate-950 sm:text-5xl">Задания ОГЭ по математике</h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Выбирайте тему, номер КИМ или сложность. Условия, ответы и подробные разборы доступны без регистрации.</p>
-        </div>
-
-        <section className="mt-8 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-2 text-sm font-extrabold text-slate-700"><Filter className="h-4 w-4 text-[#2c668f]" /> Фильтры</div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant={!topicSlug ? "default" : "outline"} size="sm" onClick={() => setTopicSlug(undefined)} className="rounded-lg">Все темы</Button>
-              {overview.data?.topics.map(topic => (
-                <Button key={topic.slug} variant={topicSlug === topic.slug ? "default" : "outline"} size="sm" onClick={() => setTopicSlug(topicSlug === topic.slug ? undefined : topic.slug)} className="rounded-lg">
-                  {topic.title}
-                </Button>
-              ))}
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-            <span className="mr-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-400"><ListFilter className="mr-1 inline h-3 w-3" />Сложность</span>
-            {(["basic", "standard", "advanced"] as const).map(level => (
-              <button key={level} type="button" onClick={() => setDifficulty(difficulty === level ? undefined : level)} className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${difficulty === level ? "bg-[#0d2945] text-white" : "bg-[#f3f6f8] text-slate-600 hover:bg-[#e6edf1]"}`}>
-                {difficultyLabel[level]}
-              </button>
-            ))}
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-            <span className="mr-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">Часть</span>
-            <button type="button" onClick={() => setPart(undefined)} className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${!part ? "bg-[#0d2945] text-white" : "bg-[#f3f6f8] text-slate-600 hover:bg-[#e6edf1]"}`}>Все</button>
-            <button type="button" onClick={() => setPart(part === "part1" ? undefined : "part1")} className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${part === "part1" ? "bg-[#0d2945] text-white" : "bg-[#f3f6f8] text-slate-600 hover:bg-[#e6edf1]"}`}>Часть 1</button>
-            <button type="button" onClick={() => setPart(part === "part2" ? undefined : "part2")} className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${part === "part2" ? "bg-[#0d2945] text-white" : "bg-[#f3f6f8] text-slate-600 hover:bg-[#e6edf1]"}`}>Часть 2</button>
-            <span className="ml-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">КИМ</span>
-            {overview.data?.taskTypes.map(item => (
-              <button key={item.kimNumber} type="button" onClick={() => setKimNumber(kimNumber === item.kimNumber ? undefined : item.kimNumber)} className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${kimNumber === item.kimNumber ? "bg-[#e9c46a] text-[#0d2945]" : "bg-[#fdf7e9] text-[#765510] hover:bg-[#f8ebc5]"}`}>{item.kimNumber}</button>
-            ))}
-          </div>
-        </section>
-
-        <section className="mt-8">
-          <div className="mb-4 flex items-center justify-between">
-            <p className="text-sm font-semibold text-slate-500">{tasks.data?.length ?? 0} заданий в подборке</p>
-            <p className="text-xs font-semibold text-slate-400">Авторский демонстрационный набор</p>
-          </div>
-          {tasks.isLoading ? <div className="grid min-h-52 place-items-center"><Loader2 className="h-7 w-7 animate-spin text-[#2c668f]" /></div> : null}
-          <div className="grid gap-3">
-            {tasks.data?.map(task => (
-              <Link key={task.id} href={`/bank/${task.slug}`} className="group block rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_3px_12px_rgba(15,35,55,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:border-[#b2cadb] hover:shadow-[0_12px_30px_rgba(15,35,55,0.08)]">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap gap-2"><Badge className="bg-[#e9f2f8] text-[#225a82] hover:bg-[#e9f2f8]">КИМ {task.kimNumber}</Badge><Badge variant="outline">Часть {task.part === "part1" ? "1" : "2"}</Badge><Badge variant="outline">{task.topicTitle}</Badge></div>
-                    <h2 className="mt-3 text-lg font-extrabold tracking-[-0.025em] text-slate-950">{task.title}</h2>
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-600">{task.statementMarkdown}</p>
-                  </div>
-                  <span className="flex shrink-0 items-center gap-2 text-sm font-extrabold text-[#245d87]">Решать <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-      </main>
-    </div>
-  );
+  return <div className="min-h-screen bg-[#0b0b0d] text-[#f5f0e9]"><PlatformHeader /><main className="container py-10 sm:py-16"><div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Открытый банк ОГЭ</p><h1 className="mt-4 text-5xl font-bold leading-[.94] tracking-[-.065em] sm:text-6xl">Не решать всё.<br /><span className="text-[#ff5b14]">Решать своё.</span></h1><p className="mt-6 max-w-md leading-7 text-[#aaa7ae]">Фильтруйте по теме, КИМ, части и сложности. Условия, ответы и разборы остаются открытыми.</p><div className="mt-8 hidden rounded-2xl border border-white/9 bg-[#151518] p-5 lg:block"><p className="text-xs font-extrabold uppercase tracking-[.15em] text-[#77747b]">Сейчас в банке</p><p className="mt-2 font-['Space_Grotesk'] text-4xl font-bold text-[#ff5b14]">{tasks.data?.length ?? 0}</p><p className="mt-1 text-sm text-[#9b989f]">задач в выбранной траектории</p></div></div><section className="rounded-[24px] border border-white/10 bg-[#151518] p-5 shadow-[0_25px_70px_rgba(0,0,0,.3)] sm:p-6"><div className="flex items-center gap-2 text-sm font-extrabold text-[#f5f0e9]"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[#ff5b14] text-[#101014]"><Filter className="h-4 w-4" /></span> Настройте маршрут</div><div className="mt-6"><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Тема</p><div className="mt-2 flex flex-wrap gap-2"><FilterPill active={!topicSlug} onClick={() => setTopicSlug(undefined)}>Все темы</FilterPill>{overview.data?.topics.map(topic => <FilterPill key={topic.slug} active={topicSlug === topic.slug} onClick={() => setTopicSlug(topicSlug === topic.slug ? undefined : topic.slug)}>{topic.title}</FilterPill>)}</div></div><div className="mt-5 border-t border-white/8 pt-5"><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]"><ListFilter className="mr-1 inline h-3 w-3" />Сложность</p><div className="mt-2 flex flex-wrap gap-2">{(["basic", "standard", "advanced"] as const).map(level => <FilterPill key={level} active={difficulty === level} onClick={() => setDifficulty(difficulty === level ? undefined : level)}>{difficultyLabel[level]}</FilterPill>)}</div></div><div className="mt-5 flex flex-wrap items-center gap-2 border-t border-white/8 pt-5"><span className="mr-1 text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Часть</span><FilterPill active={!part} onClick={() => setPart(undefined)}>Все</FilterPill><FilterPill active={part === "part1"} onClick={() => setPart(part === "part1" ? undefined : "part1")}>Часть 1</FilterPill><FilterPill active={part === "part2"} onClick={() => setPart(part === "part2" ? undefined : "part2")}>Часть 2</FilterPill><span className="ml-2 text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">КИМ</span>{overview.data?.taskTypes.map(item => <FilterPill key={item.kimNumber} active={kimNumber === item.kimNumber} onClick={() => setKimNumber(kimNumber === item.kimNumber ? undefined : item.kimNumber)}>{item.kimNumber}</FilterPill>)}</div></section></div><section className="mt-12"><div className="mb-5 flex items-center justify-between border-b border-white/9 pb-4"><p className="text-sm font-bold text-[#e9e4de]"><span className="mr-2 font-['Space_Grotesk'] text-2xl text-[#ff5b14]">{tasks.data?.length ?? 0}</span> заданий</p><p className="text-xs font-bold uppercase tracking-[.12em] text-[#77747b]">Авторский демонстрационный набор</p></div>{tasks.isLoading ? <div className="grid min-h-52 place-items-center"><Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /></div> : <div className="grid gap-3">{tasks.data?.map((task, index) => <Link key={task.id} href={`/bank/${task.slug}`} className="group relative block overflow-hidden rounded-2xl border border-white/9 bg-[#151518] p-5 transition hover:-translate-y-0.5 hover:border-[#ff5b14]/65 hover:bg-[#1b1b1f]"><span className="absolute right-5 top-4 font-['Space_Grotesk'] text-4xl font-bold text-white/4">{String(index + 1).padStart(2, "0")}</span><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><div className="flex flex-wrap gap-2"><Badge className="border-0 bg-[#ff5b14]/14 text-[#ff8b4b] hover:bg-[#ff5b14]/14">КИМ {task.kimNumber}</Badge><Badge variant="outline" className="border-white/12 text-[#aaa7ae]">Часть {task.part === "part1" ? "1" : "2"}</Badge><Badge variant="outline" className="border-white/12 text-[#aaa7ae]">{task.topicTitle}</Badge></div><h2 className="mt-4 text-xl font-bold tracking-[-.03em] text-[#f5f0e9]">{task.title}</h2><p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-[#a8a5ac]">{task.statementMarkdown}</p></div><span className="flex shrink-0 items-center gap-2 text-sm font-extrabold text-[#ff7a35]">Решать <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></span></div></Link>)}</div>}</section></main></div>;
 }
