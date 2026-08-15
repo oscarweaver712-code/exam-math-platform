@@ -1,10 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   curriculumUnits,
   examTaskTypes,
   examTrackCurriculumUnits,
   examTracks,
   taskCurriculumUnits,
+  taskHints,
+  taskSolutionSteps,
   tasks,
   taskTheoryUnits,
   taskVisuals,
@@ -12,6 +14,7 @@ import {
   theoryExamTracks,
   theoryTaskTypes,
   theoryUnits,
+  theoryVisuals,
   subjects,
 } from "../drizzle/schema";
 import { getDb } from "./db";
@@ -167,6 +170,49 @@ async function ensureTaskVisualSeed(db: NonNullable<Awaited<ReturnType<typeof ge
   if (values.length) await db.insert(taskVisuals).values(values);
 }
 
+async function ensureTheoryVisualSeed(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number) {
+  const seed = [
+    ["pythagorean-theorem", "right-triangle-6-8", "Прямоугольный треугольник с катетами 6 и 8 и неизвестной гипотенузой.", "Схема к теореме Пифагора."],
+    ["triangle-similarity", "similar-triangles-scale", "Два подобных треугольника с отмеченными соответствующими сторонами.", "Схема соответствующих сторон подобных треугольников."],
+    ["triangle-area-perimeter", "triangle-base-height", "Треугольник с выделенными основанием и высотой.", "Схема основания и высоты треугольника."],
+  ] as const;
+  const [theoryRows, existing] = await Promise.all([
+    db.select({ id: theoryUnits.id, slug: theoryUnits.slug }).from(theoryUnits).where(eq(theoryUnits.subjectId, subjectId)),
+    db.select({ theoryUnitId: theoryVisuals.theoryUnitId, diagramKey: theoryVisuals.diagramKey }).from(theoryVisuals),
+  ]);
+  const ids = new Map(theoryRows.map(row => [row.slug, row.id]));
+  const existingKeys = new Set(existing.map(row => `${row.theoryUnitId}:${row.diagramKey ?? ""}`));
+  const timestamp = now();
+  const values = seed.flatMap(([slug, diagramKey, altText, caption], index) => {
+    const theoryUnitId = ids.get(slug);
+    if (!theoryUnitId || existingKeys.has(`${theoryUnitId}:${diagramKey}`)) return [];
+    return [{ theoryUnitId, kind: "inline_svg" as const, placement: "body" as const, diagramKey, altText, caption, sourceKind: "author" as const, reviewStatus: "approved" as const, sortOrder: index, createdAt: timestamp, updatedAt: timestamp }];
+  });
+  if (values.length) await db.insert(theoryVisuals).values(values);
+}
+
+async function ensureTaskLearningSupport(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const taskRows = await db.select({ id: tasks.id, solutionMarkdown: tasks.solutionMarkdown }).from(tasks).where(and(eq(tasks.examTrackId, trackId), eq(tasks.sourceKind, "author")));
+  const [existingHints, existingSteps] = await Promise.all([
+    db.select({ taskId: taskHints.taskId }).from(taskHints),
+    db.select({ taskId: taskSolutionSteps.taskId }).from(taskSolutionSteps),
+  ]);
+  const hinted = new Set(existingHints.map(row => row.taskId));
+  const stepped = new Set(existingSteps.map(row => row.taskId));
+  const timestamp = now();
+  const hintValues = taskRows.flatMap(task => hinted.has(task.id) ? [] : [
+    { taskId: task.id, title: "Сначала выделите данные", bodyMarkdown: "Перечитайте вопрос и выпишите известные величины с единицами измерения. Не выполняйте вычисления, пока не ясно, что нужно найти.", sortOrder: 1, createdAt: timestamp, updatedAt: timestamp },
+    { taskId: task.id, title: "Выберите математический инструмент", bodyMarkdown: "Соотнесите данные с темой задания: формула, пропорция, уравнение, вероятность или геометрическое свойство. Затем составьте короткую запись решения.", sortOrder: 2, createdAt: timestamp, updatedAt: timestamp },
+  ]);
+  const stepValues = taskRows.flatMap(task => stepped.has(task.id) ? [] : [
+    { taskId: task.id, title: "Шаг 1. Понять вопрос", bodyMarkdown: "Зафиксируйте неизвестную величину и проверьте, что ответ нужен именно в указанном формате.", sortOrder: 1, createdAt: timestamp, updatedAt: timestamp },
+    { taskId: task.id, title: "Шаг 2. Выполнить вычисление", bodyMarkdown: task.solutionMarkdown, sortOrder: 2, createdAt: timestamp, updatedAt: timestamp },
+    { taskId: task.id, title: "Шаг 3. Самопроверка", bodyMarkdown: "Сверьте единицы измерения, знак и реалистичность результата. Только после этого оформляйте окончательный ответ.", sortOrder: 3, createdAt: timestamp, updatedAt: timestamp },
+  ]);
+  if (hintValues.length) await db.insert(taskHints).values(hintValues);
+  if (stepValues.length) await db.insert(taskSolutionSteps).values(stepValues);
+}
+
 let seedPromise: Promise<number | null> | null = null;
 
 /**
@@ -190,6 +236,8 @@ async function seedOgeData() {
       await ensureAuthorTaskExpansion(db, existing[0].id, track.id);
       await ensureTheoryPracticeLinks(db, track.id);
       await ensureTaskVisualSeed(db, track.id);
+      await ensureTheoryVisualSeed(db, existing[0].id);
+      await ensureTaskLearningSupport(db, track.id);
     }
     return existing[0].id;
   }
@@ -392,6 +440,8 @@ async function seedOgeData() {
   await ensureAuthorTaskExpansion(db, subject.id, track.id);
   await ensureTheoryPracticeLinks(db, track.id);
   await ensureTaskVisualSeed(db, track.id);
+  await ensureTheoryVisualSeed(db, subject.id);
+  await ensureTaskLearningSupport(db, track.id);
 
   return subject.id;
 }

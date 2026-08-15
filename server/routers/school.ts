@@ -12,12 +12,17 @@ import {
   platformProfiles,
   subjects,
   taskCurriculumUnits,
+  taskHints,
+  taskSolutionSteps,
   taskTheoryUnits,
   tasks,
   theoryCurriculumUnits,
   theoryExamTracks,
   theoryTaskTypes,
   theoryUnits,
+  theoryUnitVersions,
+  theoryVisuals,
+  type TheoryVersionSnapshot,
   tutorStudentLinks,
   tutorSubjectSpecialties,
   users,
@@ -26,6 +31,7 @@ import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { ensureOgeSeedData } from "../ogeSeed";
 import { canCreateHomework } from "../learningPolicy";
+import { storagePut } from "../storage";
 
 async function requireDb() {
   const db = await getDb();
@@ -65,6 +71,8 @@ const adminTaskInput = z.object({
   difficulty: z.enum(["basic", "standard", "advanced"]),
   answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]),
   correctAnswer: z.string().max(1024).optional(),
+  hints: z.array(z.object({ title: z.string().trim().min(2).max(160), bodyMarkdown: z.string().trim().min(5).max(4000) })).max(6).default([]),
+  solutionSteps: z.array(z.object({ title: z.string().trim().min(2).max(180), bodyMarkdown: z.string().trim().min(5).max(6000) })).max(12).default([]),
   status: z.enum(["draft", "review", "published"]).default("draft"),
 });
 
@@ -79,8 +87,40 @@ const adminTheoryInput = z.object({
   sourceKind: z.enum(["author", "licensed", "external_reference"]).default("author"),
   sourceTitle: z.string().trim().max(255).optional(),
   sourceUrl: z.string().url().max(1024).optional(),
+  changeNote: z.string().trim().max(500).optional(),
   status: z.enum(["draft", "review", "published", "archived"]).default("draft"),
 });
+
+const theoryDiagramKey = z.enum(["right-triangle-6-8", "similar-triangles-scale", "triangle-base-height"]);
+const theoryMediaUploadInput = z.object({
+  theoryUnitId: z.number().int().positive(),
+  placement: z.enum(["lead", "body"]).default("body"),
+  altText: z.string().trim().min(5).max(1000),
+  caption: z.string().trim().max(500).optional(),
+  fileName: z.string().trim().min(1).max(180),
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
+  dataUrl: z.string().min(32).max(7_000_000),
+});
+
+async function getTheorySnapshot(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, theoryUnitId: number): Promise<{ contentVersion: number; snapshot: TheoryVersionSnapshot }> {
+  const [unit] = await db.select({ title: theoryUnits.title, slug: theoryUnits.slug, lead: theoryUnits.lead, bodyMarkdown: theoryUnits.bodyMarkdown, sourceKind: theoryUnits.sourceKind, sourceTitle: theoryUnits.sourceTitle, sourceUrl: theoryUnits.sourceUrl, contentVersion: theoryUnits.contentVersion }).from(theoryUnits).where(eq(theoryUnits.id, theoryUnitId)).limit(1);
+  if (!unit) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+  const [topic, taskType, relatedTasks, visuals] = await Promise.all([
+    db.select({ slug: curriculumUnits.slug }).from(theoryCurriculumUnits).innerJoin(curriculumUnits, eq(theoryCurriculumUnits.curriculumUnitId, curriculumUnits.id)).where(eq(theoryCurriculumUnits.theoryUnitId, theoryUnitId)).limit(1),
+    db.select({ kimNumber: examTaskTypes.kimNumber }).from(theoryTaskTypes).innerJoin(examTaskTypes, eq(theoryTaskTypes.examTaskTypeId, examTaskTypes.id)).where(eq(theoryTaskTypes.theoryUnitId, theoryUnitId)).limit(1),
+    db.select({ taskId: taskTheoryUnits.taskId }).from(taskTheoryUnits).where(eq(taskTheoryUnits.theoryUnitId, theoryUnitId)),
+    db.select({ kind: theoryVisuals.kind, placement: theoryVisuals.placement, diagramKey: theoryVisuals.diagramKey, assetUrl: theoryVisuals.assetUrl, altText: theoryVisuals.altText, caption: theoryVisuals.caption }).from(theoryVisuals).where(eq(theoryVisuals.theoryUnitId, theoryUnitId)).orderBy(asc(theoryVisuals.sortOrder)),
+  ]);
+  if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Связи конспекта неполны." });
+  return { contentVersion: unit.contentVersion, snapshot: { title: unit.title, slug: unit.slug, lead: unit.lead, bodyMarkdown: unit.bodyMarkdown, topicSlug: topic[0].slug, kimNumber: taskType[0].kimNumber, relatedTaskIds: relatedTasks.map(item => item.taskId), sourceKind: unit.sourceKind, sourceTitle: unit.sourceTitle, sourceUrl: unit.sourceUrl, visuals } };
+}
+
+async function storeTheoryVersion(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, theoryUnitId: number, userId: number, changeNote?: string) {
+  const { contentVersion, snapshot } = await getTheorySnapshot(db, theoryUnitId);
+  const [latest] = await db.select({ version: theoryUnitVersions.version }).from(theoryUnitVersions).where(eq(theoryUnitVersions.theoryUnitId, theoryUnitId)).orderBy(desc(theoryUnitVersions.version)).limit(1);
+  const version = Math.max(contentVersion, (latest?.version ?? 0) + 1);
+  await db.insert(theoryUnitVersions).values({ theoryUnitId, version, snapshot, changeNote: changeNote || null, createdByUserId: userId, createdAt: Date.now() });
+}
 
 const adminPromoInput = z.object({
   placement: z.enum(["theory", "bank", "homework"]),
@@ -264,7 +304,11 @@ export const schoolRouter = router({
         .where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId)))
         .limit(1);
       if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
-      return task;
+      const [hints, solutionSteps] = await Promise.all([
+        db.select({ title: taskHints.title, bodyMarkdown: taskHints.bodyMarkdown }).from(taskHints).where(eq(taskHints.taskId, task.id)).orderBy(asc(taskHints.sortOrder)),
+        db.select({ title: taskSolutionSteps.title, bodyMarkdown: taskSolutionSteps.bodyMarkdown }).from(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, task.id)).orderBy(asc(taskSolutionSteps.sortOrder)),
+      ]);
+      return { ...task, hints, solutionSteps };
     }),
     createTask: adminProcedure
       .input(adminTaskInput)
@@ -279,6 +323,9 @@ export const schoolRouter = router({
         const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType[0].id, slug: input.slug, title: input.title.trim(), statementMarkdown: input.statementMarkdown.trim(), answerKind: input.answerKind, correctAnswer: input.correctAnswer?.trim() || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown.trim(), difficulty: input.difficulty, sourceKind: "author", contentVersion: 1, status: input.status, createdAt: Date.now(), updatedAt: Date.now(), publishedAt: input.status === "published" ? Date.now() : null });
         const taskId = Number(inserted[0].insertId);
         await db.insert(taskCurriculumUnits).values({ taskId, curriculumUnitId: topic[0].id });
+        const timestamp = Date.now();
+        if (input.hints.length) await db.insert(taskHints).values(input.hints.map((hint, index) => ({ taskId, title: hint.title, bodyMarkdown: hint.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+        if (input.solutionSteps.length) await db.insert(taskSolutionSteps).values(input.solutionSteps.map((step, index) => ({ taskId, title: step.title, bodyMarkdown: step.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         return { taskId };
       }),
     updateTask: adminProcedure
@@ -309,6 +356,11 @@ export const schoolRouter = router({
         }).where(eq(tasks.id, input.taskId));
         await db.delete(taskCurriculumUnits).where(eq(taskCurriculumUnits.taskId, input.taskId));
         await db.insert(taskCurriculumUnits).values({ taskId: input.taskId, curriculumUnitId: topic[0].id });
+        await db.delete(taskHints).where(eq(taskHints.taskId, input.taskId));
+        await db.delete(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, input.taskId));
+        const timestamp = Date.now();
+        if (input.hints.length) await db.insert(taskHints).values(input.hints.map((hint, index) => ({ taskId: input.taskId, title: hint.title, bodyMarkdown: hint.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+        if (input.solutionSteps.length) await db.insert(taskSolutionSteps).values(input.solutionSteps.map((step, index) => ({ taskId: input.taskId, title: step.title, bodyMarkdown: step.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         return { taskId: input.taskId };
       }),
     theory: adminProcedure.query(async () => {
@@ -360,14 +412,13 @@ export const schoolRouter = router({
         .where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId)))
         .limit(1);
       if (!unit) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
-      const relatedTasks = await db
-        .select({ id: tasks.id, title: tasks.title, slug: tasks.slug })
-        .from(taskTheoryUnits)
-        .innerJoin(tasks, eq(taskTheoryUnits.taskId, tasks.id))
-        .where(and(eq(taskTheoryUnits.theoryUnitId, unit.id), eq(tasks.examTrackId, trackId)));
-      return { ...unit, relatedTaskIds: relatedTasks.map(task => task.id), relatedTasks };
+      const [relatedTasks, visuals] = await Promise.all([
+        db.select({ id: tasks.id, title: tasks.title, slug: tasks.slug }).from(taskTheoryUnits).innerJoin(tasks, eq(taskTheoryUnits.taskId, tasks.id)).where(and(eq(taskTheoryUnits.theoryUnitId, unit.id), eq(tasks.examTrackId, trackId))),
+        db.select({ id: theoryVisuals.id, kind: theoryVisuals.kind, placement: theoryVisuals.placement, diagramKey: theoryVisuals.diagramKey, assetUrl: theoryVisuals.assetUrl, altText: theoryVisuals.altText, caption: theoryVisuals.caption, reviewStatus: theoryVisuals.reviewStatus }).from(theoryVisuals).where(eq(theoryVisuals.theoryUnitId, unit.id)).orderBy(asc(theoryVisuals.sortOrder)),
+      ]);
+      return { ...unit, relatedTaskIds: relatedTasks.map(task => task.id), relatedTasks, visuals };
     }),
-    createTheory: adminProcedure.input(adminTheoryInput).mutation(async ({ input }) => {
+    createTheory: adminProcedure.input(adminTheoryInput).mutation(async ({ input, ctx }) => {
       const { db, trackId, subjectId } = await getMathTrack();
       const [topic, taskType, linkedTasks, lastTheory] = await Promise.all([
         db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, input.topicSlug))).limit(1),
@@ -387,9 +438,10 @@ export const schoolRouter = router({
       await db.insert(theoryCurriculumUnits).values({ theoryUnitId, curriculumUnitId: topic[0].id });
       await db.insert(theoryTaskTypes).values({ theoryUnitId, examTaskTypeId: taskType[0].id });
       if (input.relatedTaskIds.length) await db.insert(taskTheoryUnits).values(input.relatedTaskIds.map(taskId => ({ taskId, theoryUnitId })));
+      await storeTheoryVersion(db, theoryUnitId, ctx.user.id, input.changeNote || "Создана первая редакция конспекта.");
       return { theoryUnitId };
     }),
-    updateTheory: adminProcedure.input(adminTheoryInput.extend({ theoryUnitId: z.number().int().positive() })).mutation(async ({ input }) => {
+    updateTheory: adminProcedure.input(adminTheoryInput.extend({ theoryUnitId: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
       const { db, trackId, subjectId } = await getMathTrack();
       const [existing, topic, taskType, linkedTasks] = await Promise.all([
         db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1),
@@ -411,6 +463,76 @@ export const schoolRouter = router({
       await db.insert(theoryCurriculumUnits).values({ theoryUnitId: input.theoryUnitId, curriculumUnitId: topic[0].id });
       await db.insert(theoryTaskTypes).values({ theoryUnitId: input.theoryUnitId, examTaskTypeId: taskType[0].id });
       if (input.relatedTaskIds.length) await db.insert(taskTheoryUnits).values(input.relatedTaskIds.map(taskId => ({ taskId, theoryUnitId: input.theoryUnitId })));
+      await storeTheoryVersion(db, input.theoryUnitId, ctx.user.id, input.changeNote || "Обновлена редакция конспекта.");
+      return { theoryUnitId: input.theoryUnitId };
+    }),
+    theoryVersions: adminProcedure.input(z.object({ theoryUnitId: z.number().int().positive() })).query(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [allowed] = await db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1);
+      if (!allowed) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      return db.select({ id: theoryUnitVersions.id, version: theoryUnitVersions.version, changeNote: theoryUnitVersions.changeNote, createdAt: theoryUnitVersions.createdAt, editorName: users.name, snapshot: theoryUnitVersions.snapshot }).from(theoryUnitVersions).leftJoin(users, eq(theoryUnitVersions.createdByUserId, users.id)).where(eq(theoryUnitVersions.theoryUnitId, input.theoryUnitId)).orderBy(desc(theoryUnitVersions.version));
+    }),
+    uploadTheoryMedia: adminProcedure.input(theoryMediaUploadInput).mutation(async ({ input, ctx }) => {
+      const { db, trackId } = await getMathTrack();
+      const [allowed] = await db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1);
+      if (!allowed) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      const match = input.dataUrl.match(/^data:([^;,]+);base64,(.+)$/);
+      if (!match || match[1] !== input.contentType) throw new TRPCError({ code: "BAD_REQUEST", message: "Некорректный формат изображения." });
+      const bytes = Buffer.from(match[2], "base64");
+      if (!bytes.length || bytes.length > 5 * 1024 * 1024) throw new TRPCError({ code: "BAD_REQUEST", message: "Размер изображения должен быть не больше 5 МБ." });
+      const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const stored = await storagePut(`theory/${input.theoryUnitId}/${Date.now()}-${safeName}`, bytes, input.contentType);
+      const [last] = await db.select({ sortOrder: theoryVisuals.sortOrder }).from(theoryVisuals).where(eq(theoryVisuals.theoryUnitId, input.theoryUnitId)).orderBy(desc(theoryVisuals.sortOrder)).limit(1);
+      const timestamp = Date.now();
+      const inserted = await db.insert(theoryVisuals).values({ theoryUnitId: input.theoryUnitId, kind: "image_asset", placement: input.placement, assetKey: stored.key, assetUrl: stored.url, altText: input.altText, caption: input.caption || null, sourceKind: "author", reviewStatus: "approved", sortOrder: (last?.sortOrder ?? 0) + 1, createdAt: timestamp, updatedAt: timestamp });
+      await storeTheoryVersion(db, input.theoryUnitId, ctx.user.id, "Добавлено изображение к конспекту.");
+      return { visualId: Number(inserted[0].insertId), url: stored.url };
+    }),
+    addTheoryDiagram: adminProcedure.input(z.object({ theoryUnitId: z.number().int().positive(), placement: z.enum(["lead", "body"]).default("body"), diagramKey: theoryDiagramKey, altText: z.string().trim().min(5).max(1000), caption: z.string().trim().max(500).optional() })).mutation(async ({ input, ctx }) => {
+      const { db, trackId } = await getMathTrack();
+      const [allowed, last] = await Promise.all([
+        db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1),
+        db.select({ sortOrder: theoryVisuals.sortOrder }).from(theoryVisuals).where(eq(theoryVisuals.theoryUnitId, input.theoryUnitId)).orderBy(desc(theoryVisuals.sortOrder)).limit(1),
+      ]);
+      if (!allowed[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Конспект не найден." });
+      const timestamp = Date.now();
+      const inserted = await db.insert(theoryVisuals).values({ theoryUnitId: input.theoryUnitId, kind: "inline_svg", placement: input.placement, diagramKey: input.diagramKey, altText: input.altText, caption: input.caption || null, sourceKind: "author", reviewStatus: "approved", sortOrder: (last[0]?.sortOrder ?? 0) + 1, createdAt: timestamp, updatedAt: timestamp });
+      await storeTheoryVersion(db, input.theoryUnitId, ctx.user.id, "Добавлена геометрическая схема.");
+      return { visualId: Number(inserted[0].insertId) };
+    }),
+    removeTheoryMedia: adminProcedure.input(z.object({ theoryUnitId: z.number().int().positive(), visualId: z.number().int().positive() })).mutation(async ({ input, ctx }) => {
+      const { db, trackId } = await getMathTrack();
+      const [visual] = await db.select({ id: theoryVisuals.id }).from(theoryVisuals).innerJoin(theoryExamTracks, eq(theoryVisuals.theoryUnitId, theoryExamTracks.theoryUnitId)).where(and(eq(theoryVisuals.id, input.visualId), eq(theoryVisuals.theoryUnitId, input.theoryUnitId), eq(theoryExamTracks.examTrackId, trackId))).limit(1);
+      if (!visual) throw new TRPCError({ code: "NOT_FOUND", message: "Визуальный материал не найден." });
+      await db.delete(theoryVisuals).where(eq(theoryVisuals.id, input.visualId));
+      await storeTheoryVersion(db, input.theoryUnitId, ctx.user.id, "Удалён визуальный материал.");
+      return { success: true };
+    }),
+    restoreTheoryVersion: adminProcedure.input(z.object({ theoryUnitId: z.number().int().positive(), version: z.number().int().positive(), changeNote: z.string().trim().max(500).optional() })).mutation(async ({ input, ctx }) => {
+      const { db, trackId, subjectId } = await getMathTrack();
+      const [allowed, versionRecord] = await Promise.all([
+        db.select({ id: theoryUnits.id }).from(theoryExamTracks).innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id)).where(and(eq(theoryExamTracks.examTrackId, trackId), eq(theoryUnits.id, input.theoryUnitId))).limit(1),
+        db.select({ snapshot: theoryUnitVersions.snapshot }).from(theoryUnitVersions).where(and(eq(theoryUnitVersions.theoryUnitId, input.theoryUnitId), eq(theoryUnitVersions.version, input.version))).limit(1),
+      ]);
+      if (!allowed[0] || !versionRecord[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Редакция конспекта не найдена." });
+      const snapshot = versionRecord[0].snapshot;
+      const [topic, taskType, linkedTasks] = await Promise.all([
+        db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, snapshot.topicSlug))).limit(1),
+        db.select({ id: examTaskTypes.id }).from(examTaskTypes).where(and(eq(examTaskTypes.examTrackId, trackId), eq(examTaskTypes.kimNumber, snapshot.kimNumber))).limit(1),
+        snapshot.relatedTaskIds.length ? db.select({ id: tasks.id }).from(tasks).where(and(inArray(tasks.id, snapshot.relatedTaskIds), eq(tasks.examTrackId, trackId))) : Promise.resolve([]),
+      ]);
+      if (!topic[0] || !taskType[0] || linkedTasks.length !== snapshot.relatedTaskIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "Эту версию нельзя восстановить: связанные данные изменились." });
+      const timestamp = Date.now();
+      await db.update(theoryUnits).set({ title: snapshot.title, slug: snapshot.slug, lead: snapshot.lead, bodyMarkdown: snapshot.bodyMarkdown, sourceKind: snapshot.sourceKind, sourceTitle: snapshot.sourceTitle ?? null, sourceUrl: snapshot.sourceUrl ?? null, contentVersion: sql`${theoryUnits.contentVersion} + 1`, updatedAt: timestamp }).where(eq(theoryUnits.id, input.theoryUnitId));
+      await db.delete(theoryCurriculumUnits).where(eq(theoryCurriculumUnits.theoryUnitId, input.theoryUnitId));
+      await db.delete(theoryTaskTypes).where(eq(theoryTaskTypes.theoryUnitId, input.theoryUnitId));
+      await db.delete(taskTheoryUnits).where(eq(taskTheoryUnits.theoryUnitId, input.theoryUnitId));
+      await db.delete(theoryVisuals).where(eq(theoryVisuals.theoryUnitId, input.theoryUnitId));
+      await db.insert(theoryCurriculumUnits).values({ theoryUnitId: input.theoryUnitId, curriculumUnitId: topic[0].id });
+      await db.insert(theoryTaskTypes).values({ theoryUnitId: input.theoryUnitId, examTaskTypeId: taskType[0].id });
+      if (snapshot.relatedTaskIds.length) await db.insert(taskTheoryUnits).values(snapshot.relatedTaskIds.map(taskId => ({ taskId, theoryUnitId: input.theoryUnitId })));
+      if (snapshot.visuals.length) await db.insert(theoryVisuals).values(snapshot.visuals.map((visual, index) => ({ theoryUnitId: input.theoryUnitId, kind: visual.kind, placement: visual.placement, diagramKey: visual.diagramKey ?? null, assetUrl: visual.assetUrl ?? null, altText: visual.altText, caption: visual.caption ?? null, sourceKind: "author" as const, reviewStatus: "approved" as const, sortOrder: index, createdAt: timestamp, updatedAt: timestamp })));
+      await storeTheoryVersion(db, input.theoryUnitId, ctx.user.id, input.changeNote || `Восстановлена редакция ${input.version}.`);
       return { theoryUnitId: input.theoryUnitId };
     }),
   }),

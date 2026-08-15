@@ -34,6 +34,20 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+export type TheoryVersionSnapshot = {
+  title: string;
+  slug: string;
+  lead: string;
+  bodyMarkdown: string;
+  topicSlug: string;
+  kimNumber: string;
+  relatedTaskIds: number[];
+  sourceKind: "author" | "licensed" | "external_reference";
+  sourceTitle?: string | null;
+  sourceUrl?: string | null;
+  visuals: Array<{ kind: "inline_svg" | "image_asset"; placement: "lead" | "body"; diagramKey?: string | null; assetUrl?: string | null; altText: string; caption?: string | null }>;
+};
+
 /** A school subject, for example mathematics, physics, or Russian language. */
 export const subjects = mysqlTable(
   "subjects",
@@ -245,6 +259,44 @@ export const theoryTaskTypes = mysqlTable(
   ],
 );
 
+/** Ordered visual aids used by theory units. Asset files live in object storage. */
+export const theoryVisuals = mysqlTable(
+  "theory_visuals",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    theoryUnitId: int("theoryUnitId").notNull().references(() => theoryUnits.id, { onDelete: "cascade" }),
+    kind: mysqlEnum("kind", ["inline_svg", "image_asset"]).notNull(),
+    placement: mysqlEnum("placement", ["lead", "body"]).default("body").notNull(),
+    diagramKey: varchar("diagramKey", { length: 120 }),
+    assetKey: varchar("assetKey", { length: 2048 }),
+    assetUrl: varchar("assetUrl", { length: 2048 }),
+    altText: text("altText").notNull(),
+    caption: varchar("caption", { length: 500 }),
+    sourceKind: mysqlEnum("sourceKind", ["author", "external"]).default("author").notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 2048 }),
+    reviewStatus: mysqlEnum("reviewStatus", ["draft", "review", "approved", "rejected"]).default("draft").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [index("theory_visuals_unit_placement_idx").on(table.theoryUnitId, table.placement, table.sortOrder), index("theory_visuals_review_idx").on(table.reviewStatus)],
+);
+
+/** Immutable editorial snapshots, allowing a reviewable rollback without destructive data loss. */
+export const theoryUnitVersions = mysqlTable(
+  "theory_unit_versions",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    theoryUnitId: int("theoryUnitId").notNull().references(() => theoryUnits.id, { onDelete: "cascade" }),
+    version: int("version").notNull(),
+    snapshot: json("snapshot").$type<TheoryVersionSnapshot>().notNull(),
+    changeNote: varchar("changeNote", { length: 500 }),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  },
+  table => [uniqueIndex("theory_versions_unit_version_unique").on(table.theoryUnitId, table.version), index("theory_versions_unit_created_idx").on(table.theoryUnitId, table.createdAt)],
+);
+
 /** A restrained, editor-controlled promotion for the school’s own learning events. */
 export const learningPromos = mysqlTable(
   "learning_promos",
@@ -369,6 +421,36 @@ export const taskVisuals = mysqlTable(
     index("task_visuals_task_placement_idx").on(table.taskId, table.placement, table.sortOrder),
     index("task_visuals_review_idx").on(table.reviewStatus),
   ],
+);
+
+/** Progressive help that learners reveal intentionally before seeing a full solution. */
+export const taskHints = mysqlTable(
+  "task_hints",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    taskId: int("taskId").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 160 }).notNull(),
+    bodyMarkdown: text("bodyMarkdown").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [index("task_hints_task_order_idx").on(table.taskId, table.sortOrder)],
+);
+
+/** Ordered explanation blocks for the full solution after the learner elects to review it. */
+export const taskSolutionSteps = mysqlTable(
+  "task_solution_steps",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    taskId: int("taskId").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 180 }).notNull(),
+    bodyMarkdown: text("bodyMarkdown").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [index("task_solution_steps_task_order_idx").on(table.taskId, table.sortOrder)],
 );
 
 export const taskCurriculumUnits = mysqlTable(

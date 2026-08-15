@@ -79,6 +79,10 @@ describe("public bank and tutor homework flow", () => {
     const details = await caller.publicBank.getTask({ slug: listing[0].slug });
     expect(details.title).toBe(listing[0].title);
     expect(details.part).toBe("part1");
+    expect(details.hints.length).toBeGreaterThanOrEqual(2);
+    expect(details.solutionSteps.length).toBeGreaterThanOrEqual(3);
+    expect(details.hints.map(hint => hint.sortOrder)).toEqual([...details.hints.map(hint => hint.sortOrder)].sort((left, right) => left - right));
+    expect(details.solutionSteps.map(step => step.sortOrder)).toEqual([...details.solutionSteps.map(step => step.sortOrder)].sort((left, right) => left - right));
     const geometryTask = await caller.publicBank.getTask({ slug: "triangle-angle" });
     expect(geometryTask.visuals).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: "inline_svg", diagramKey: "triangle-angle-48-67" }),
@@ -172,6 +176,7 @@ describe("public bank and tutor homework flow", () => {
   it("enforces actual protected, tutor-only, student-only and admin-only procedures", async () => {
     const anonymous = appRouter.createCaller(createContext(null));
     await expect(anonymous.school.student.homework()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(anonymous.school.admin.theoryVersions({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
 
     const db = await getDb();
     if (!db) throw new Error("Database unavailable for role test");
@@ -187,6 +192,11 @@ describe("public bank and tutor homework flow", () => {
     await expect(studentCaller.school.admin.tasks()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.theory()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.getTheory({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.theoryVersions({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.addTheoryDiagram({ theoryUnitId: 1, placement: "body", diagramKey: "right-triangle-6-8", altText: "Несанкционированная схема" })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.removeTheoryMedia({ theoryUnitId: 1, visualId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.restoreTheoryVersion({ theoryUnitId: 1, version: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.uploadTheoryMedia({ theoryUnitId: 1, placement: "body", altText: "Несанкционированное изображение", fileName: "blocked.png", contentType: "image/png", dataUrl: "data:image/png;base64,iVBORw0KGgo=" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const blockedTheoryInput = {
       title: "Несанкционированный конспект",
       slug: `blocked-theory-${suffix}`,
@@ -267,12 +277,19 @@ describe("public bank and tutor homework flow", () => {
     };
     const createdTheory = await adminCaller.school.admin.createTheory(input);
     temporaryTheoryIds.push(createdTheory.theoryUnitId);
+    const firstVersions = await adminCaller.school.admin.theoryVersions({ theoryUnitId: createdTheory.theoryUnitId });
+    expect(firstVersions).toEqual(expect.arrayContaining([expect.objectContaining({ version: 1, snapshot: expect.objectContaining({ title: input.title }) })]));
     expect((await publicCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" })).some(item => item.slug === slug)).toBe(false);
     await adminCaller.school.admin.updateTheory({ ...input, theoryUnitId: createdTheory.theoryUnitId, status: "published" });
+    await adminCaller.school.admin.addTheoryDiagram({ theoryUnitId: createdTheory.theoryUnitId, placement: "body", diagramKey: "right-triangle-6-8", altText: "Тестовая схема прямоугольного треугольника", caption: "Тестовая подпись" });
     const published = await publicCaller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
     expect(published).toEqual(expect.arrayContaining([
-      expect.objectContaining({ slug, sourceKind: "author", relatedTasks: expect.arrayContaining([expect.objectContaining({ id: relatedTaskId })]) }),
+      expect.objectContaining({ slug, sourceKind: "author", relatedTasks: expect.arrayContaining([expect.objectContaining({ id: relatedTaskId })]), visuals: expect.arrayContaining([expect.objectContaining({ diagramKey: "right-triangle-6-8" })]) }),
     ]));
+    await adminCaller.school.admin.restoreTheoryVersion({ theoryUnitId: createdTheory.theoryUnitId, version: 1, changeNote: "Проверка отката" });
+    const restored = await adminCaller.school.admin.getTheory({ theoryUnitId: createdTheory.theoryUnitId });
+    expect(restored.visuals).toHaveLength(0);
+    expect((await adminCaller.school.admin.theoryVersions({ theoryUnitId: createdTheory.theoryUnitId })).length).toBeGreaterThanOrEqual(4);
   });
 
   it("shows an editor-controlled school event only after an administrator activates it", async () => {

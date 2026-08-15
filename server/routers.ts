@@ -12,6 +12,8 @@ import {
   subjects,
   taskAttempts,
   taskCurriculumUnits,
+  taskHints,
+  taskSolutionSteps,
   taskTheoryUnits,
   taskVisuals,
   tasks,
@@ -19,6 +21,7 @@ import {
   theoryExamTracks,
   theoryTaskTypes,
   theoryUnits,
+  theoryVisuals,
   userTheoryProgress,
 } from "../drizzle/schema";
 import { checkPartOneAnswer } from "./answerValidation";
@@ -171,7 +174,11 @@ export const appRouter = router({
         .from(taskVisuals)
         .where(and(eq(taskVisuals.taskId, task.id), eq(taskVisuals.reviewStatus, "approved")))
         .orderBy(asc(taskVisuals.sortOrder));
-      return { ...task, relatedTheory, visuals };
+      const [hints, solutionSteps] = await Promise.all([
+        db.select({ id: taskHints.id, title: taskHints.title, bodyMarkdown: taskHints.bodyMarkdown, sortOrder: taskHints.sortOrder }).from(taskHints).where(eq(taskHints.taskId, task.id)).orderBy(asc(taskHints.sortOrder)),
+        db.select({ id: taskSolutionSteps.id, title: taskSolutionSteps.title, bodyMarkdown: taskSolutionSteps.bodyMarkdown, sortOrder: taskSolutionSteps.sortOrder }).from(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, task.id)).orderBy(asc(taskSolutionSteps.sortOrder)),
+      ]);
+      return { ...task, relatedTheory, visuals, hints, solutionSteps };
     }),
     checkAnswer: publicProcedure
       .input(z.object({ taskId: z.number().int().positive(), rawAnswer: z.string().min(1).max(1024) }))
@@ -239,16 +246,28 @@ export const appRouter = router({
         .innerJoin(tasks, eq(taskTheoryUnits.taskId, tasks.id))
         .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
         .where(and(eq(tasks.examTrackId, track.id), eq(tasks.status, "published")));
+      const visualRows = await db
+        .select({ theoryUnitId: theoryVisuals.theoryUnitId, id: theoryVisuals.id, kind: theoryVisuals.kind, placement: theoryVisuals.placement, diagramKey: theoryVisuals.diagramKey, assetUrl: theoryVisuals.assetUrl, altText: theoryVisuals.altText, caption: theoryVisuals.caption })
+        .from(theoryVisuals)
+        .innerJoin(theoryUnits, eq(theoryVisuals.theoryUnitId, theoryUnits.id))
+        .where(and(eq(theoryUnits.status, "published"), eq(theoryVisuals.reviewStatus, "approved")))
+        .orderBy(asc(theoryVisuals.sortOrder));
       const relatedByTheory = new Map<number, Array<{ id: number; slug: string; title: string; kimNumber: string }>>();
       for (const row of relatedRows) {
         const current = relatedByTheory.get(row.theoryUnitId) ?? [];
         current.push({ id: row.id, slug: row.slug, title: row.title, kimNumber: row.kimNumber });
         relatedByTheory.set(row.theoryUnitId, current);
       }
+      const visualsByTheory = new Map<number, Array<(typeof visualRows)[number]>>();
+      for (const visual of visualRows) {
+        const current = visualsByTheory.get(visual.theoryUnitId) ?? [];
+        current.push(visual);
+        visualsByTheory.set(visual.theoryUnitId, current);
+      }
       const normalizedSearch = input.search?.toLocaleLowerCase("ru-RU");
       return theoryRows
         .filter(item => !normalizedSearch || `${item.title} ${item.lead} ${item.bodyMarkdown}`.toLocaleLowerCase("ru-RU").includes(normalizedSearch))
-        .map(item => ({ ...item, relatedTasks: relatedByTheory.get(item.id) ?? [] }));
+        .map(item => ({ ...item, relatedTasks: relatedByTheory.get(item.id) ?? [], visuals: visualsByTheory.get(item.id) ?? [] }));
     }),
   }),
   theory: router({

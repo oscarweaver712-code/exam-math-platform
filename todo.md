@@ -79,3 +79,14 @@
 - [x] Define a multi-subject, multi-exam content workflow that keeps source registration, editorial review, publication, and student visibility deterministic.
 - [x] Add explicit wrong-role coverage for every administrative theory-editor procedure.
 - [x] Save a new checkpoint after the verified theory-editor and expanded content work.
+- [x] Audit current theory media, task visuals, storage conventions, and content editor contracts before extending them.
+- [x] Add editor-managed images and deterministic geometry diagrams to theory units, with captions, alt text, placement, and safe public rendering.
+- [x] Add immutable version history for theory units with editor, timestamp, snapshot, compare view, and administrator-only rollback.
+- [x] Add structured interactive hints and step-by-step solution blocks to author-created training tasks without exposing the final answer prematurely.
+- [x] Extend the theory editor with media controls and a version-history interface, and extend task pages with progressive hints and solution steps.
+- [x] Add Vitest coverage for media visibility, version rollback and access control, plus task hints and step ordering.
+- [x] Verify the new editor and self-study experience on desktop and mobile, then save a checkpoint.
+- [x] Prevent transient rendering of administrative editor forms before the authenticated role check completes.
+- [x] Save a new checkpoint after the verified media, version history, and guided self-study work.
+- [x] Add a concise compare view for the current and selected saved theory revision before an administrator initiates rollback.
+- [x] Add explicit unauthenticated and wrong-role Vitest coverage for every new theory media and version-history procedure.
