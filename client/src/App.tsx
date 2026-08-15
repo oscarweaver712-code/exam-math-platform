@@ -5,12 +5,26 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import TaskBank from "./pages/TaskBank";
+import TaskDetail from "./pages/TaskDetail";
+import Theory from "./pages/Theory";
+import Workspace from "./pages/Workspace";
+import TutorWorkspace from "./pages/TutorWorkspace";
+import AdminTasks from "./pages/AdminTasks";
+import PracticeCenter from "./pages/PracticeCenter";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/bank"} component={TaskBank} />
+      <Route path={"/bank/:slug"} component={TaskDetail} />
+      <Route path={"/theory"} component={Theory} />
+      <Route path={"/workspace"} component={Workspace} />
+      <Route path={"/practice"} component={PracticeCenter} />
+      <Route path={"/tutor"} component={TutorWorkspace} />
+      <Route path={"/admin/tasks"} component={AdminTasks} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

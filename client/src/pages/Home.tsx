@@ -1,33 +1,31 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+import { PlatformHeader } from "@/components/PlatformHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { trpc } from "@/lib/trpc";
+import { ArrowRight, BookOpen, CheckCircle2, CircleDotDashed, GraduationCap, Loader2, Search, Sparkles } from "lucide-react";
+import { Link } from "wouter";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
-
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const overview = trpc.publicBank.overview.useQuery();
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen bg-[#fbfaf7]">
+      <PlatformHeader />
       <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
+        <section className="overflow-hidden bg-[#0d2945] text-white">
+          <div className="container relative grid min-h-[550px] items-center gap-12 py-16 lg:grid-cols-[1.2fr_0.8fr] lg:py-20">
+            <div className="pointer-events-none absolute -right-24 top-0 h-80 w-80 rounded-full bg-[#2d628f]/35 blur-3xl" />
+            <div className="pointer-events-none absolute bottom-[-140px] left-[32%] h-80 w-80 rounded-full bg-[#e9c46a]/12 blur-3xl" />
+            <div className="relative"><div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-[#e9c46a]"><Sparkles className="h-3.5 w-3.5" /> Открытая платформа онлайн-школы</div><h1 className="mt-6 max-w-3xl text-5xl font-extrabold leading-[0.98] tracking-[-0.065em] sm:text-6xl">Математика, в которой видно <span className="text-[#e9c46a]">следующий шаг.</span></h1><p className="mt-6 max-w-xl text-base leading-7 text-slate-300 sm:text-lg">Открытый банк заданий и теория ОГЭ. Решайте бесплатно, а в личном тренажёре сохраняйте задачи, отмечайте попытки и наблюдайте прогресс по темам.</p><div className="mt-8 flex flex-wrap gap-3"><Link href="/bank"><Button size="lg" className="rounded-lg bg-[#e9c46a] px-6 font-extrabold text-[#0d2945] hover:bg-[#f1d684]">Начать решать <ArrowRight className="ml-2 h-4 w-4" /></Button></Link><Link href="/theory"><Button size="lg" variant="outline" className="rounded-lg border-white/25 bg-white/5 px-6 font-extrabold text-white hover:bg-white/10 hover:text-white">Открыть теорию</Button></Link></div><p className="mt-5 text-xs font-semibold text-slate-400">Без регистрации: условия, ответы и разборы. Без навязчивого платного доступа.</p></div>
+            <div className="relative mx-auto w-full max-w-md rounded-3xl border border-white/15 bg-white/[0.08] p-5 shadow-2xl backdrop-blur-sm sm:p-6"><div className="flex items-center justify-between"><p className="text-xs font-extrabold uppercase tracking-[0.16em] text-slate-300">Маршрут ОГЭ</p><Badge className="bg-[#e9c46a] text-[#0d2945] hover:bg-[#e9c46a]">Прототип</Badge></div><div className="mt-5 space-y-3">{overview.data?.topics.slice(0, 6).map((topic, index) => <div key={topic.slug} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-[#0a2239]/60 px-4 py-3"><span className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-xs font-extrabold text-[#e9c46a]">0{index + 1}</span><span className="text-sm font-bold text-white">{topic.title}</span><CheckCircle2 className="ml-auto h-4 w-4 text-[#83c59e]" /></div>)}{overview.isLoading ? <div className="grid min-h-40 place-items-center"><Loader2 className="h-6 w-6 animate-spin" /></div> : null}</div><div className="mt-5 flex items-center gap-3 border-t border-white/10 pt-5 text-sm text-slate-300"><CircleDotDashed className="h-4 w-4 text-[#e9c46a]" /> Теория связана с заданиями и темами</div></div>
+          </div>
+        </section>
+
+        <section className="container py-16 sm:py-24"><div className="max-w-2xl"><p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#2c668f]">Не просто решать подряд</p><h2 className="mt-3 text-4xl font-extrabold tracking-[-0.055em] text-slate-950">Соберите свою карту подготовки</h2><p className="mt-4 text-base leading-7 text-slate-600">Каждое задание привязано к теме, номеру КИМ и теоретическому материалу. Система не заменяет преподавателя — она делает обучение понятнее до и между занятиями.</p></div><div className="mt-10 grid gap-4 md:grid-cols-3"><div className="rounded-2xl border border-slate-200 bg-white p-6"><Search className="h-6 w-6 text-[#2c668f]" /><h3 className="mt-5 text-lg font-extrabold text-slate-950">Найти нужное</h3><p className="mt-2 text-sm leading-6 text-slate-600">Фильтры по теме, номеру КИМ, части и сложности — чтобы тренировать конкретный пробел.</p></div><div className="rounded-2xl border border-slate-200 bg-white p-6"><BookOpen className="h-6 w-6 text-[#b88318]" /><h3 className="mt-5 text-lg font-extrabold text-slate-950">Понять правило</h3><p className="mt-2 text-sm leading-6 text-slate-600">Короткая теория с алгоритмом и типичной ошибкой открывается рядом с задачей.</p></div><div className="rounded-2xl border border-slate-200 bg-white p-6"><GraduationCap className="h-6 w-6 text-[#4c966b]" /><h3 className="mt-5 text-lg font-extrabold text-slate-950">Видеть прогресс</h3><p className="mt-2 text-sm leading-6 text-slate-600">После входа — сохранённые задания, история попыток и будущая связка с преподавателем.</p></div></div></section>
+
+        <section className="border-y border-[#e4e8e5] bg-[#f2f6f8]"><div className="container py-14 sm:py-18"><div className="flex flex-col justify-between gap-6 md:flex-row md:items-end"><div><p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#2c668f]">Первый учебный срез</p><h2 className="mt-3 text-3xl font-extrabold tracking-[-0.05em] text-slate-950">Шесть тем, которые уже работают как единый маршрут.</h2></div><Link href="/bank"><Button variant="outline" className="rounded-lg font-extrabold">Смотреть задания <ArrowRight className="ml-2 h-4 w-4" /></Button></Link></div><div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{overview.data?.topics.map((topic, index) => <Link key={topic.slug} href={`/bank`} className="group rounded-xl border border-white bg-white px-4 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"><p className="text-xs font-extrabold text-[#b88318]">0{index + 1}</p><p className="mt-1 font-extrabold text-slate-900">{topic.title}</p><p className="mt-2 text-sm leading-5 text-slate-500">{topic.description}</p></Link>)}</div></div></section>
       </main>
+      <footer className="container py-8 text-xs font-medium text-slate-500"><span className="font-extrabold text-slate-700">Математика · Открытая школа</span> <span className="mx-2">—</span> Авторский прототип банка ОГЭ. Материалы ФИПИ не импортируются без отдельной проверки источника.</footer>
     </div>
   );
 }

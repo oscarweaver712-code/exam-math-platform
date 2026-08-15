@@ -1,0 +1,37 @@
+# Project TODO
+
+- [x] Define a refined visual system for the public task bank and authenticated workspaces, including typography, colours, spacing, responsive behaviour, and accessible interaction states.
+- [x] Extend the user model with the student, tutor, administrator, and unselected-role states needed for first-login role selection and access control.
+- [x] Design and migrate the modular data model for exam tracks, topics, task metadata, public tasks, answer keys, solutions, homework, submissions, and tutor–student relationships.
+- [x] Build a public catalogue of ОГЭ mathematics prototype tasks with filters for КИМ number, topic, part, and difficulty; retain data-model readiness for ЕГЭ.
+- [x] Build a publicly accessible task detail page with statement, optional answer choices, step-by-step solution, and clear Часть 1 / Часть 2 context.
+- [x] Build first-login role selection for «Ученик» and «Репетитор» without placing role choice in registration.
+- [x] Build the tutor workspace for linking students, assembling tasks from the bank, assigning homework, and setting deadlines.
+- [x] Build the student workspace for viewing homework, entering answers, submitting attempts, and receiving immediate Part 1 results.
+- [x] Implement instant answer validation strictly for «Часть 1» tasks and prevent automatic validation for «Часть 2» tasks.
+- [x] Build the student progress map with correct and incorrect results segmented by topic and task type.
+- [x] Build the administrator workspace to add, edit, publish, and manage task statements, answer keys, solutions, and metadata.
+- [x] Create representative first-version task content for safe functional demonstration and clearly mark it as platform seed content pending editorial review.
+- [x] Add Vitest coverage for role gating, public task access, Part 1 answer checking, homework assignment, and progress aggregation.
+- [x] Verify all key screens across desktop and mobile layouts, resolve visible issues, and confirm type checking and automated tests pass.
+- [x] Save a completed project checkpoint with all implemented items marked as complete.
+- [x] Review the supplied project audit and document concrete improvements to MVP scope, modular boundaries, content governance, and rollout sequence.
+- [x] Define the minimal product decisions the founder must approve while the implementation work is completed independently.
+- [x] Define and implement an explicitly free public-bank experience, with task discovery and solutions accessible without registration.
+- [x] Define the authenticated convenience layer: saved tasks, completed-task history, personalised progress, curated practice sets, and homework when linked to a tutor.
+- [x] Position the public product and all call-to-action content as an online-school platform rather than a closed tutoring CRM.
+- [x] Confirm the three-level experience: guest access to the bank, authenticated personal learning tools, and tutor-linked school support.
+- [x] Make the content, exam, topic, role, and tutor–student models subject-agnostic while delivering mathematics as the first subject.
+- [x] Add a public theory module with filtering by subject, exam track, topic, and КИМ number, and link theory units to relevant tasks.
+- [x] Design a lawful, repeatable import and editorial-review workflow for any FIPI-derived content before attempting large-scale acquisition.
+- [x] Deliver the public-bank, theory, and personal-learning prototype before expanding to the full FIPI corpus, new subjects, or additional tutor teams.
+- [x] Configure ОГЭ mathematics as the first prototype exam track, while retaining data-model support for ЕГЭ and additional subjects.
+- [x] Implement subject-agnostic subject and exam-track entities, with mathematics ОГЭ seeded as the active prototype track.
+- [x] Wire the ОГЭ mathematics prototype track into the public bank and theory interfaces with verifiable seed content and routing.
+- [x] Seed the prototype learning map with six ОГЭ mathematics blocks: calculations and percentages, equations, graphs and functions, probability, plane geometry, and practical-context tasks.
+- [x] Add a tutor-facing deadline control and persist/display the due date across homework assignment and student views.
+- [x] Add student-facing attempt history and an authenticated curated practice set from saved tasks.
+- [x] Extend theory filters for the active subject, exam track, and КИМ number alongside topic filtering.
+- [x] Add focused Vitest coverage for published-only public-bank access and the tutor homework-assignment flow.
+- [x] Add integration tests that real tutor, student and administrator procedures reject unauthenticated or wrong-role callers.
+- [x] Add integration tests proving draft and review tasks are excluded from public bank list and detail routes.
