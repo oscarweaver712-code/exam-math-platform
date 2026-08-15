@@ -10,6 +10,7 @@ import {
   tasks,
   taskTheoryUnits,
   taskVisuals,
+  variantGenerationSchedules,
   theoryCurriculumUnits,
   theoryExamTracks,
   theoryTaskTypes,
@@ -18,6 +19,7 @@ import {
   subjects,
 } from "../drizzle/schema";
 import { getDb } from "./db";
+import { createPublishedMonthlyVariant, monthKeyFrom } from "./variantService";
 
 const now = () => Date.now();
 
@@ -57,6 +59,86 @@ const AUTHOR_TASK_EXPANSION = [
   ["distance-unit-conversion", "Перевод расстояния", "Велосипедист проехал 3,6 км. Сколько метров он проехал?", "short_integer", "3600", "В одном километре 1000 метров. Поэтому `3,6 × 1000 = 3600` метров.", "basic", "practical-context", "1–5", "unit-conversion"],
   ["schedule-table-reading", "Расписание по таблице", "Автобус отправился в 08:35 и прибыл в 10:05. Сколько минут длилась поездка?", "short_integer", "90", "От 08:35 до 09:35 проходит 60 минут, затем до 10:05 ещё 30 минут. Всего 90 минут.", "standard", "practical-context", "1–5", "tables-and-readings"],
 ] as const;
+
+const FULL_OGE_KIM_TYPES = [
+  ["1", "Практическая задача: данные и величины", "part1"], ["2", "Практическая задача: таблица и расчёт", "part1"], ["3", "Практическая задача: сравнение условий", "part1"], ["4", "Практическая задача: выбор по данным", "part1"], ["5", "Практическая задача: итоговый расчёт", "part1"],
+  ["6", "Числа и вычисления", "part1"], ["7", "Координаты и числовая прямая", "part1"], ["8", "Алгебраические выражения", "part1"], ["9", "Уравнения и неравенства", "part1"], ["10", "Вероятность и статистика", "part1"], ["11", "Функции и графики", "part1"], ["12", "Последовательности", "part1"],
+  ["13", "Геометрия: углы и фигуры", "part1"], ["14", "Геометрия: окружность и четырёхугольники", "part1"], ["15", "Геометрия: треугольники", "part1"], ["16", "Геометрия: площади", "part1"], ["17", "Геометрия: длины и теоремы", "part1"], ["18", "Геометрия: утверждения", "part1"], ["19", "Статистика", "part1"],
+  ["20", "Алгебраическое уравнение", "part2"], ["21", "Алгебраическая текстовая задача", "part2"], ["22", "Функции и графики", "part2"], ["23", "Геометрическое доказательство", "part2"], ["24", "Геометрическая задача", "part2"], ["25", "Геометрическая задача повышенного уровня", "part2"],
+] as const;
+
+const FULL_KIM_AUTHOR_TASKS = [
+  ["kim-01-tariff", "Тариф по условию", "Абонент выбрал тариф: 180 рублей фиксированно и 4 рубля за каждую минуту сверх 30 минут. За месяц он говорил 45 минут. Сколько рублей составила плата?", "short_integer", "240", "Сверх лимита использовано `45 − 30 = 15` минут. Доплата равна `15 × 4 = 60`, итог: `180 + 60 = 240` рублей.", "basic", "practical-context", "1", "rate-time-distance"],
+  ["kim-02-fuel", "Расход топлива", "Автомобиль расходует 8 литров топлива на 100 км. Сколько литров потребуется на путь 250 км?", "short_integer", "20", "На 250 км расход увеличится в `2,5` раза: `8 × 2,5 = 20` литров.", "basic", "practical-context", "2", "direct-proportion"],
+  ["kim-03-schedule", "Время по расписанию", "Электричка отправилась в 09:18 и прибыла в 10:47. Сколько минут длилась поездка?", "short_integer", "89", "От 09:18 до 10:18 проходит 60 минут, затем ещё 29 минут. Всего `60 + 29 = 89` минут.", "basic", "practical-context", "3", "tables-and-readings"],
+  ["kim-04-plan-area", "Площадь по плану", "На плане 1 см соответствует 4 м. Прямоугольная площадка на плане имеет стороны 5 см и 3 см. Найдите её реальную площадь в квадратных метрах.", "short_integer", "240", "Реальные стороны: `5 × 4 = 20` м и `3 × 4 = 12` м. Площадь: `20 × 12 = 240` м².", "standard", "practical-context", "4", "unit-conversion"],
+  ["kim-05-purchase", "Покупка со скидкой", "Тетрадь стоит 84 рубля. При покупке трёх тетрадей действует скидка 20% на весь набор. Сколько рублей заплатит покупатель?", "short_integer", "202", "Без скидки набор стоит `84 × 3 = 252` рубля. После скидки платят 80%: `252 × 0,8 = 201,6`, то есть 202 рубля при оплате целыми рублями.", "standard", "practical-context", "5", "percentages-proportions"],
+  ["kim-06-fractions", "Вычисление с дробями", "Вычислите: `3/4 + 5/8`.", "short_decimal", "1.375", "Приводим к знаменателю 8: `3/4 = 6/8`. Получаем `6/8 + 5/8 = 11/8 = 1,375`.", "basic", "calculations-percentages", "6", "fractions-and-order"],
+  ["kim-07-coordinate", "Координата точки", "Точка A имеет координаты (−3; 5). Чему равна сумма координат точки A?", "short_integer", "2", "Складываем координаты: `−3 + 5 = 2`.", "basic", "graphs-functions", "7", "coordinate-plane"],
+  ["kim-08-expression", "Значение выражения", "Найдите значение выражения `2a − 3b`, если `a = 7`, `b = 4`.", "short_integer", "2", "Подставляем значения: `2 × 7 − 3 × 4 = 14 − 12 = 2`.", "basic", "equations", "8", "algebraic-expressions"],
+  ["kim-09-inequality", "Линейное неравенство", "Решите неравенство `3x − 5 > 10`. В ответ запишите наименьшее целое решение.", "short_integer", "6", "Получаем `3x > 15`, значит `x > 5`. Наименьшее целое значение — 6.", "standard", "equations", "9", "linear-equations"],
+  ["kim-10-probability", "Вероятность выбора", "В коробке 4 зелёных и 6 жёлтых карандашей. Наугад выбирают один карандаш. Какова вероятность выбрать зелёный?", "short_decimal", "0.4", "Всего 10 карандашей, зелёных 4. Вероятность `4/10 = 0,4`.", "basic", "probability", "10", "classical-probability"],
+  ["kim-11-function", "Значение линейной функции", "Функция задана формулой `y = 5 − 2x`. Найдите значение функции при `x = −3`.", "short_integer", "11", "Подставляем `−3`: `5 − 2 × (−3) = 5 + 6 = 11`.", "basic", "graphs-functions", "11", "function-value"],
+  ["kim-12-sequence", "Арифметическая последовательность", "В арифметической последовательности первый член равен 4, разность равна 3. Найдите пятый член.", "short_integer", "16", "Каждый следующий член увеличивается на 3: `4, 7, 10, 13, 16`. Пятый член — 16.", "basic", "equations", "12", "linear-equations"],
+  ["kim-13-angles", "Смежные углы", "Один из смежных углов равен 128°. Найдите другой угол в градусах.", "short_integer", "52", "Смежные углы в сумме дают 180°. Значит, `180 − 128 = 52`.", "basic", "plane-geometry", "13", "triangle-angles"],
+  ["kim-14-rectangle", "Диагональ прямоугольника", "Стороны прямоугольника равны 5 см и 12 см. Найдите его диагональ в сантиметрах.", "short_integer", "13", "Диагональ — гипотенуза прямоугольного треугольника: `d² = 5² + 12² = 169`, поэтому `d = 13`.", "standard", "plane-geometry", "14", "pythagorean-theorem"],
+  ["kim-15-similarity", "Подобные треугольники", "Сторона малого треугольника равна 6 см. Коэффициент подобия большого треугольника к малому равен 1,5. Найдите соответствующую сторону большого треугольника.", "short_integer", "9", "Соответствующая сторона увеличилась в 1,5 раза: `6 × 1,5 = 9` см.", "standard", "plane-geometry", "15", "triangle-similarity"],
+  ["kim-16-area", "Площадь параллелограмма", "Основание параллелограмма равно 11 см, высота к нему равна 6 см. Найдите площадь в квадратных сантиметрах.", "short_integer", "66", "Площадь параллелограмма: `S = a × h = 11 × 6 = 66`.", "basic", "plane-geometry", "16", "triangle-area-perimeter"],
+  ["kim-17-hypotenuse", "Катет прямоугольного треугольника", "Гипотенуза прямоугольного треугольника равна 10 см, один катет — 6 см. Найдите второй катет.", "short_integer", "8", "По теореме Пифагора: `b² = 10² − 6² = 100 − 36 = 64`, значит `b = 8`.", "standard", "plane-geometry", "17", "pythagorean-theorem"],
+  ["kim-18-statement", "Верное утверждение", "Какое утверждение верно? 1) Диагонали любого прямоугольника перпендикулярны. 2) Сумма углов треугольника равна 180°. 3) Любой ромб является квадратом. В ответ запишите номер верного утверждения.", "short_integer", "2", "Верно утверждение 2. Диагонали прямоугольника не обязаны быть перпендикулярными, а ромб не всегда квадрат.", "basic", "plane-geometry", "18", "triangle-angles"],
+  ["kim-19-mean", "Среднее арифметическое", "Найдите среднее арифметическое чисел 6, 8, 11 и 15.", "short_integer", "10", "Сумма чисел равна `6 + 8 + 11 + 15 = 40`. Делим на 4: `40 / 4 = 10`.", "basic", "probability", "19", "classical-probability"],
+  ["kim-20-quadratic", "Квадратное уравнение", "Решите уравнение `x² − 7x + 12 = 0`.", "manual", "", "Разложим на множители: `x² − 7x + 12 = (x − 3)(x − 4)`. Поэтому `x = 3` или `x = 4`.", "advanced", "equations", "20", "quadratic-equations"],
+  ["kim-21-work", "Совместная работа", "Один мастер выполняет заказ за 6 часов, другой — за 3 часа. За сколько часов они выполнят заказ вместе?", "manual", "", "За час мастера выполняют соответственно `1/6` и `1/3` заказа. Вместе: `1/6 + 1/3 = 1/2` заказа в час, значит весь заказ займёт 2 часа.", "advanced", "practical-context", "21", "direct-proportion"],
+  ["kim-22-parabola", "Пересечение графика", "Для функции `y = x² − 4` найдите значения x, при которых `y = 5`.", "manual", "", "Приравниваем: `x² − 4 = 5`, откуда `x² = 9`. Следовательно, `x = −3` или `x = 3`.", "advanced", "graphs-functions", "22", "function-zero"],
+  ["kim-23-proof", "Доказательство равенства углов", "В треугольнике ABC стороны AB и AC равны. Докажите, что углы при основании B и C равны.", "manual", "", "Рассмотрим треугольник ABC. Он равнобедренный, так как AB = AC. По свойству равнобедренного треугольника углы при основании равны: ∠B = ∠C.", "advanced", "plane-geometry", "23", "triangle-angles"],
+  ["kim-24-radius", "Радиус окружности", "Длина окружности равна `10π` см. Найдите её радиус.", "manual", "", "Используем формулу `C = 2πr`. Из `10π = 2πr` получаем `r = 5` см.", "advanced", "plane-geometry", "24", "triangle-area-perimeter"],
+  ["kim-25-complex-geometry", "Площадь трапеции", "Основания трапеции равны 8 см и 14 см, высота равна 5 см. Найдите площадь трапеции.", "manual", "", "Площадь трапеции: `S = (a + b)h / 2 = (8 + 14) × 5 / 2 = 55` см².", "advanced", "plane-geometry", "25", "triangle-area-perimeter"],
+] as const;
+
+const FULL_KIM_VARIATION_TASKS = [
+  ["kim-01-water", "Расход воды", "Кран наполняет 12 литров воды за минуту. Сколько литров он нальёт за 8 минут?", "short_integer", "96", "Умножаем расход на время: `12 × 8 = 96` литров.", "basic", "practical-context", "1", "rate-time-distance"],
+  ["kim-02-packages", "Упаковки товара", "В одной упаковке 6 одинаковых блокнотов. Сколько блокнотов в 9 упаковках?", "short_integer", "54", "В девяти упаковках будет `6 × 9 = 54` блокнота.", "basic", "practical-context", "2", "direct-proportion"],
+  ["kim-03-break", "Перерыв по времени", "Урок начался в 11:25 и закончился в 12:10. Сколько минут длился урок?", "short_integer", "45", "От 11:25 до 12:00 — 35 минут, затем ещё 10. Итого 45 минут.", "basic", "practical-context", "3", "tables-and-readings"],
+  ["kim-04-scale", "Расстояние на карте", "На карте 1 см соответствует 2 км. Расстояние между городами на карте равно 7,5 см. Найдите реальное расстояние в километрах.", "short_integer", "15", "Умножаем длину на масштаб: `7,5 × 2 = 15` км.", "basic", "practical-context", "4", "unit-conversion"],
+  ["kim-05-mobile", "Стоимость связи", "За пакет связи нужно заплатить 350 рублей. При оплате через приложение действует скидка 10%. Сколько рублей составит платёж?", "short_integer", "315", "После скидки платят 90% цены: `350 × 0,9 = 315` рублей.", "basic", "practical-context", "5", "percentages-proportions"],
+  ["kim-06-decimal", "Десятичная дробь", "Вычислите: `4,8 : 0,6`.", "short_integer", "8", "Умножим делимое и делитель на 10: `48 : 6 = 8`.", "basic", "calculations-percentages", "6", "fractions-and-order"],
+  ["kim-07-distance", "Расстояние между координатами", "На координатной прямой отмечены точки A(−4) и B(3). Найдите расстояние между ними.", "short_integer", "7", "Расстояние равно `3 − (−4) = 7`.", "basic", "graphs-functions", "7", "coordinate-plane"],
+  ["kim-08-brackets", "Упрощение выражения", "Найдите значение выражения `3(x − 2) + 5`, если `x = 6`.", "short_integer", "17", "Подставляем: `3 × (6 − 2) + 5 = 12 + 5 = 17`.", "basic", "equations", "8", "algebraic-expressions"],
+  ["kim-09-equation", "Линейное уравнение", "Решите уравнение `5x + 4 = 29`.", "short_integer", "5", "Вычитаем 4: `5x = 25`. Делим на 5: `x = 5`.", "basic", "equations", "9", "linear-equations"],
+  ["kim-10-dice", "Вероятность на кубике", "Игральный кубик бросают один раз. Какова вероятность выпадения числа больше 4?", "short_decimal", "0.3333333333333333", "Подходят числа 5 и 6: два исхода из шести. `2/6 = 1/3`.", "basic", "probability", "10", "classical-probability"],
+  ["kim-11-line", "Линейная функция", "Функция задана формулой `y = 4x − 1`. Найдите x, если `y = 15`.", "short_integer", "4", "Решаем `4x − 1 = 15`: `4x = 16`, значит `x = 4`.", "standard", "graphs-functions", "11", "function-zero"],
+  ["kim-12-progression", "Член последовательности", "В арифметической последовательности 10, 14, 18, … Найдите четвёртый член.", "short_integer", "22", "Разность равна 4. Четвёртый член: `18 + 4 = 22`.", "basic", "equations", "12", "linear-equations"],
+  ["kim-13-triangle", "Угол треугольника", "В треугольнике два угла равны 36° и 74°. Найдите третий угол.", "short_integer", "70", "Сумма углов треугольника 180°. Получаем `180 − 36 − 74 = 70`.", "basic", "plane-geometry", "13", "triangle-angles"],
+  ["kim-14-circle", "Диаметр окружности", "Радиус окружности равен 9 см. Найдите её диаметр.", "short_integer", "18", "Диаметр вдвое больше радиуса: `2 × 9 = 18` см.", "basic", "plane-geometry", "14", "triangle-area-perimeter"],
+  ["kim-15-isosceles", "Равнобедренный треугольник", "В равнобедренном треугольнике угол при вершине равен 46°. Найдите угол при основании.", "short_integer", "67", "Сумма углов при основании равна `180 − 46 = 134`. Каждый из них: `134 / 2 = 67`.", "basic", "plane-geometry", "15", "triangle-angles"],
+  ["kim-16-triangle-area", "Площадь треугольника", "Основание треугольника равно 14 см, высота к нему равна 6 см. Найдите площадь.", "short_integer", "42", "Площадь: `14 × 6 / 2 = 42` см².", "basic", "plane-geometry", "16", "triangle-area-perimeter"],
+  ["kim-17-rectangle", "Периметр прямоугольника", "Стороны прямоугольника равны 9 см и 4 см. Найдите его периметр.", "short_integer", "26", "Периметр: `2 × (9 + 4) = 26` см.", "basic", "plane-geometry", "17", "triangle-area-perimeter"],
+  ["kim-18-true", "Свойство треугольника", "Какое утверждение верно? 1) В равностороннем треугольнике все углы равны. 2) Любой прямоугольник — квадрат. 3) У ромба все углы прямые. В ответ запишите номер верного утверждения.", "short_integer", "1", "Верно утверждение 1. Равносторонний треугольник имеет равные стороны и равные углы.", "basic", "plane-geometry", "18", "triangle-angles"],
+  ["kim-19-median", "Медиана чисел", "Найдите медиану набора чисел 3, 5, 8, 9, 14.", "short_integer", "8", "Числа уже упорядочены. Среднее по месту, третье число, равно 8.", "basic", "probability", "19", "classical-probability"],
+  ["kim-20-system", "Система уравнений", "Решите систему: `x + y = 9`, `x − y = 3`.", "manual", "", "Сложим уравнения: `2x = 12`, поэтому `x = 6`. Тогда `y = 3`.", "advanced", "equations", "20", "linear-equations"],
+  ["kim-21-mixture", "Задача на проценты", "В 20 литрах раствора содержится 30% соли. Сколько литров соли содержится в растворе?", "manual", "", "Количество соли равно `20 × 0,3 = 6` литров.", "advanced", "practical-context", "21", "percentages-proportions"],
+  ["kim-22-graph", "Нули функции", "Найдите нули функции `y = x² − 16`.", "manual", "", "Приравниваем к нулю: `x² = 16`. Получаем `x = −4` и `x = 4`.", "advanced", "graphs-functions", "22", "function-zero"],
+  ["kim-23-proof-triangle", "Доказательство о равнобедренном треугольнике", "Докажите, что медиана, проведённая к основанию равнобедренного треугольника, является высотой.", "manual", "", "Медиана делит основание пополам. Треугольники по обе стороны медианы равны по двум сторонам и включённому основанию, поэтому углы при основании медианы равны. Они смежные, значит каждый равен 90°, и медиана является высотой.", "advanced", "plane-geometry", "23", "triangle-angles"],
+  ["kim-24-sector", "Площадь прямоугольника", "Длина прямоугольника равна 13 см, ширина — 7 см. Найдите площадь.", "manual", "", "Площадь прямоугольника: `S = 13 × 7 = 91` см².", "advanced", "plane-geometry", "24", "triangle-area-perimeter"],
+  ["kim-25-similar", "Подобие и длина", "Два подобных треугольника имеют коэффициент подобия 2. Соответствующая сторона меньшего треугольника равна 7 см. Найдите сторону большего треугольника.", "manual", "", "Сторона увеличивается в 2 раза: `7 × 2 = 14` см.", "advanced", "plane-geometry", "25", "triangle-similarity"],
+] as const;
+
+async function ensureOgeTaskTypes(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const existing = await db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId));
+  const legacy = existing.find(item => item.kimNumber === "1–5");
+  if (legacy && !existing.some(item => item.kimNumber === "1")) {
+    await db.update(examTaskTypes).set({ kimNumber: "1", title: "Практическая задача: данные и величины", part: "part1", sortOrder: 1, description: "Авторский тип КИМ № 1.", updatedAt: now() }).where(eq(examTaskTypes.id, legacy.id));
+  }
+  const refreshed = await db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId));
+  const existingByNumber = new Map(refreshed.map(item => [item.kimNumber, item.id]));
+  const timestamp = now();
+  const missing = FULL_OGE_KIM_TYPES.filter(([kimNumber]) => !existingByNumber.has(kimNumber));
+  await Promise.all(FULL_OGE_KIM_TYPES.flatMap(([kimNumber, title, part]) => {
+    const id = existingByNumber.get(kimNumber);
+    return id ? [db.update(examTaskTypes).set({ title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, isActive: true, updatedAt: timestamp }).where(eq(examTaskTypes.id, id))] : [];
+  }));
+  if (missing.length) await db.insert(examTaskTypes).values(missing.map(([kimNumber, title, part]) => ({ examTrackId: trackId, kimNumber, title, part, sortOrder: Number(kimNumber), description: `Авторский тип КИМ № ${kimNumber}.`, isActive: true, createdAt: timestamp, updatedAt: timestamp })));
+}
 
 async function ensureTheorySeed(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
   const existingRows = await db.select({ slug: theoryUnits.slug }).from(theoryUnits).where(eq(theoryUnits.subjectId, subjectId));
@@ -107,7 +189,7 @@ async function ensureTheoryPracticeLinks(db: NonNullable<Awaited<ReturnType<type
 async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
   const existingRows = await db.select({ slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const existingSlugs = new Set(existingRows.map(row => row.slug));
-  const missing = AUTHOR_TASK_EXPANSION.filter(([slug]) => !existingSlugs.has(slug));
+  const missing = [...AUTHOR_TASK_EXPANSION, ...FULL_KIM_AUTHOR_TASKS, ...FULL_KIM_VARIATION_TASKS].filter(([slug]) => !existingSlugs.has(slug));
   if (!missing.length) return;
   const [topicRows, taskTypeRows, theoryRows] = await Promise.all([
     db.select({ id: curriculumUnits.id, slug: curriculumUnits.slug }).from(curriculumUnits).where(eq(curriculumUnits.subjectId, subjectId)),
@@ -230,14 +312,23 @@ async function seedOgeData() {
     .limit(1);
 
   if (existing[0]) {
+    const [existingEge] = await db.select({ id: examTracks.id }).from(examTracks).where(eq(examTracks.slug, "ege-mathematics")).limit(1);
+    if (!existingEge) {
+      const timestamp = now();
+      await db.insert(examTracks).values({ subjectId: existing[0].id, slug: "ege-mathematics", title: "ЕГЭ по математике", examKind: "ege", description: "Маршрут подготовки к ЕГЭ создан; наполнение банка проходит отдельную редакционную калибровку.", isPrototype: true, isActive: true, createdAt: timestamp, updatedAt: timestamp });
+    }
     const [track] = await db.select({ id: examTracks.id }).from(examTracks).where(eq(examTracks.slug, "oge-mathematics")).limit(1);
     if (track) {
+      await ensureOgeTaskTypes(db, track.id);
       await ensureTheorySeed(db, existing[0].id, track.id);
       await ensureAuthorTaskExpansion(db, existing[0].id, track.id);
       await ensureTheoryPracticeLinks(db, track.id);
       await ensureTaskVisualSeed(db, track.id);
       await ensureTheoryVisualSeed(db, existing[0].id);
       await ensureTaskLearningSupport(db, track.id);
+      await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
+      const [schedule] = await db.select({ id: variantGenerationSchedules.id }).from(variantGenerationSchedules).where(eq(variantGenerationSchedules.examTrackId, track.id)).limit(1);
+      if (!schedule) await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
     }
     return existing[0].id;
   }
@@ -266,6 +357,18 @@ async function seedOgeData() {
     title: "ОГЭ по математике",
     examKind: "oge",
     description: "Демонстрационная учебная карта по шести базовым блокам ОГЭ.",
+    isPrototype: true,
+    isActive: true,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
+
+  await db.insert(examTracks).values({
+    subjectId: subject.id,
+    slug: "ege-mathematics",
+    title: "ЕГЭ по математике",
+    examKind: "ege",
+    description: "Маршрут подготовки к ЕГЭ создан; наполнение банка проходит отдельную редакционную калибровку.",
     isPrototype: true,
     isActive: true,
     createdAt: timestamp,
@@ -314,28 +417,7 @@ async function seedOgeData() {
     })),
   );
 
-  const taskTypeSeed = [
-    ["practical", "1–5", "Практико-ориентированные задачи", "part1"],
-    ["calculations", "6", "Вычисления и проценты", "part1"],
-    ["equations", "8", "Уравнения", "part1"],
-    ["graphs", "11", "Графики и функции", "part1"],
-    ["probability", "10", "Вероятность", "part1"],
-    ["geometry", "15", "Планиметрия", "part1"],
-  ] as const;
-
-  await db.insert(examTaskTypes).values(
-    taskTypeSeed.map(([key, kimNumber, title, part], index) => ({
-      examTrackId: track.id,
-      kimNumber,
-      title,
-      part,
-      sortOrder: index + 1,
-      description: `Прототипная привязка: ${key}.`,
-      isActive: true,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    })),
-  );
+  await ensureOgeTaskTypes(db, track.id);
 
   const taskTypeRows = await db
     .select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber })
@@ -442,6 +524,8 @@ async function seedOgeData() {
   await ensureTaskVisualSeed(db, track.id);
   await ensureTheoryVisualSeed(db, subject.id);
   await ensureTaskLearningSupport(db, track.id);
+  await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
+  await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
 
   return subject.id;
 }

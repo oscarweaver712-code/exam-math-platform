@@ -102,3 +102,16 @@
 - [x] Display source classification and source title as separate visible fields in every public task card, and cover both fields in the public-list integration test.
 - [x] Restore accessible contrast for publication-status and source-classification labels on light-theme task cards.
 - [x] Create a new checkpoint after the final bank-first verification work.
+- [x] Define the OGE variant composition, monthly publication policy, and subject-to-exam navigation rules before implementation.
+- [ ] Apply the approved policy: automatically publish monthly strict-specification OGE variants, keep custom variants session-only, and expose a routable EGE placeholder.
+- [x] Add persisted entities and database migration for manual import cases, legal review decisions, external-media moderation, generated exam variants, variant items, and schedule ownership; user-generated session variants intentionally do not persist attempts.
+- [x] Build an administrator-only import queue with mandatory rights-review states, evidence fields, rejection reasons, and controlled conversion into editable task drafts.
+- [x] Build a separate external-image moderation queue with approved/rejected outcomes, reviewer note, immutable audit event, and public rendering limited to approved assets.
+- [x] Expand OGE mathematics task-type definitions and authoring controls to cover all current KIM task numbers while retaining multi-subject readiness.
+- [x] Add a sufficient, clearly marked author-created OGE practice set to create deterministic prototype variants without importing protected source text.
+- [x] Build subject and exam selection routes and a clear bank entry with task-number filtering; generated-variant discovery, custom generation, and solving are delivered in the dedicated variant phase.
+- [x] Generate and publish OGE variants with deterministic per-KIM selection; expose their immutable composition and one-off generation without persisting session attempts.
+- [x] Build a dedicated variant-solving route with in-variant navigation, context and safe task answer checking for published and one-off variants.
+- [ ] Add a project-level monthly job that creates draft OGE variants idempotently, then document deployment and activation steps.
+- [ ] Add Vitest coverage for import rights gating, media moderation, full-KIM coverage, variant generation, public visibility, and scheduled job idempotency.
+- [ ] Verify responsive public and admin workflows, then save a checkpoint for the routed variant system.

@@ -1,11 +1,13 @@
 import { COOKIE_NAME } from "@shared/const";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   curriculumUnits,
   examTaskTypes,
   examTracks,
+  examVariantItems,
+  examVariants,
   learningPromos,
   platformProfiles,
   savedTasks,
@@ -32,6 +34,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { ensureOgeSeedData } from "./ogeSeed";
+import { buildEphemeralVariant } from "./variantService";
 import { schoolRouter } from "./routers/school";
 
 const publicFilters = z.object({
@@ -60,6 +63,19 @@ async function getOgeTrack() {
   return track;
 }
 
+async function getPublicTrack(subjectSlug: string, trackSlug: string) {
+  await ensureOgeSeedData();
+  const db = await requireDb();
+  const [track] = await db
+    .select({ id: examTracks.id, slug: examTracks.slug, title: examTracks.title, examKind: examTracks.examKind, description: examTracks.description, isPrototype: examTracks.isPrototype, subjectId: subjects.id, subjectSlug: subjects.slug, subjectTitle: subjects.title })
+    .from(examTracks)
+    .innerJoin(subjects, eq(examTracks.subjectId, subjects.id))
+    .where(and(eq(subjects.slug, subjectSlug), eq(examTracks.slug, trackSlug), eq(subjects.isActive, true), eq(examTracks.isActive, true)))
+    .limit(1);
+  if (!track) throw new TRPCError({ code: "NOT_FOUND", message: "Экзаменационная траектория не найдена." });
+  return { db, track };
+}
+
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -71,6 +87,28 @@ export const appRouter = router({
       return {
         success: true,
       } as const;
+    }),
+  }),
+  catalog: router({
+    subjects: publicProcedure.query(async () => {
+      await ensureOgeSeedData();
+      const db = await requireDb();
+      return db.select({ slug: subjects.slug, title: subjects.title, shortTitle: subjects.shortTitle, description: subjects.description }).from(subjects).where(eq(subjects.isActive, true)).orderBy(asc(subjects.title));
+    }),
+    examTracks: publicProcedure.input(z.object({ subjectSlug: z.string().min(1) })).query(async ({ input }) => {
+      await ensureOgeSeedData();
+      const db = await requireDb();
+      const rows = await db.select({ slug: examTracks.slug, title: examTracks.title, examKind: examTracks.examKind, description: examTracks.description, isPrototype: examTracks.isPrototype, subjectSlug: subjects.slug, subjectTitle: subjects.title, id: examTracks.id }).from(examTracks).innerJoin(subjects, eq(examTracks.subjectId, subjects.id)).where(and(eq(subjects.slug, input.subjectSlug), eq(subjects.isActive, true), eq(examTracks.isActive, true))).orderBy(asc(examTracks.examKind));
+      const ids = rows.map(row => row.id);
+      const counts = ids.length ? await db.select({ examTrackId: tasks.examTrackId, count: sql<number>`count(${tasks.id})` }).from(tasks).where(and(inArray(tasks.examTrackId, ids), eq(tasks.status, "published"))).groupBy(tasks.examTrackId) : [];
+      const countByTrack = new Map(counts.map(item => [item.examTrackId, Number(item.count)]));
+      return rows.map(({ id, ...track }) => ({ ...track, taskCount: countByTrack.get(id) ?? 0 }));
+    }),
+    trackOverview: publicProcedure.input(z.object({ subjectSlug: z.string().min(1), trackSlug: z.string().min(1) })).query(async ({ input }) => {
+      const { db, track } = await getPublicTrack(input.subjectSlug, input.trackSlug);
+      const [taskCount] = await db.select({ count: sql<number>`count(${tasks.id})` }).from(tasks).where(and(eq(tasks.examTrackId, track.id), eq(tasks.status, "published")));
+      const taskTypes = await db.select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title, part: examTaskTypes.part }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, track.id)).orderBy(asc(examTaskTypes.sortOrder));
+      return { track, taskCount: Number(taskCount?.count ?? 0), taskTypes };
     }),
   }),
   publicBank: router({
@@ -107,6 +145,20 @@ export const appRouter = router({
         .where(and(eq(learningPromos.examTrackId, track.id), eq(learningPromos.placement, input.placement), eq(learningPromos.isActive, true)))
         .orderBy(asc(learningPromos.sortOrder));
       return promos.find(promo => (!promo.startsAt || promo.startsAt <= now) && (!promo.endsAt || promo.endsAt >= now)) ?? null;
+    }),
+    listVariants: publicProcedure.query(async () => {
+      const track = await getOgeTrack(); const db = await requireDb();
+      return db.select({ slug: examVariants.slug, title: examVariants.title, monthKey: examVariants.monthKey, publishedAt: examVariants.publishedAt }).from(examVariants).where(and(eq(examVariants.examTrackId, track.id), eq(examVariants.status, "published"))).orderBy(desc(examVariants.publishedAt));
+    }),
+    getVariant: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
+      const track = await getOgeTrack(); const db = await requireDb();
+      const [variant] = await db.select({ id: examVariants.id, slug: examVariants.slug, title: examVariants.title, monthKey: examVariants.monthKey, publishedAt: examVariants.publishedAt }).from(examVariants).where(and(eq(examVariants.examTrackId, track.id), eq(examVariants.slug, input.slug), eq(examVariants.status, "published"))).limit(1);
+      if (!variant) throw new TRPCError({ code: "NOT_FOUND", message: "Вариант не найден." });
+      const items = await db.select({ taskId: tasks.id, slug: tasks.slug, title: tasks.title, statementMarkdown: tasks.statementMarkdown, answerKind: tasks.answerKind, kimNumber: examTaskTypes.kimNumber, part: examTaskTypes.part, sortOrder: examVariantItems.sortOrder }).from(examVariantItems).innerJoin(tasks, eq(examVariantItems.taskId, tasks.id)).innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id)).where(eq(examVariantItems.examVariantId, variant.id)).orderBy(asc(examVariantItems.sortOrder));
+      return { ...variant, items };
+    }),
+    generateSessionVariant: publicProcedure.input(z.object({ entropy: z.string().min(8).max(160) })).query(async ({ input }) => {
+      const track = await getOgeTrack(); return buildEphemeralVariant(await requireDb(), track.id, input.entropy);
     }),
     listTasks: publicProcedure.input(publicFilters).query(async ({ input }) => {
       const track = await getOgeTrack();

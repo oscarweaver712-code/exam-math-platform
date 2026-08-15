@@ -3,6 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
+  contentImportCases,
+  contentImportEvents,
   curriculumUnits,
   examTaskTypes,
   examTracks,
@@ -88,7 +90,7 @@ async function recordTaskEvent(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   taskId: number,
   editorUserId: number,
-  eventType: "created" | "updated" | "published" | "archived" | "restored" | "soft_deleted" | "source_updated" | "media_added" | "media_removed",
+  eventType: "created" | "updated" | "published" | "archived" | "restored" | "soft_deleted" | "source_updated" | "media_added" | "media_approved" | "media_rejected" | "media_removed",
   note?: string,
 ) {
   const [task] = await db.select({ title: tasks.title, slug: tasks.slug, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, contentVersion: tasks.contentVersion, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
@@ -134,6 +136,36 @@ const taskMediaUploadInput = z.object({
   contentType: z.enum(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]),
   dataUrl: z.string().min(32).max(7_000_000),
 });
+
+const importCaseInput = z.object({
+  kimNumber: z.string().trim().min(1).max(32),
+  sourceKind: z.enum(["fipi", "partner"]),
+  sourceTitle: z.string().trim().min(3).max(255),
+  sourceUrl: z.string().url().max(1024),
+  sourceRecordId: z.string().trim().max(255).optional(),
+  proposedTitle: z.string().trim().min(4).max(220),
+  sourceSummary: z.string().trim().min(20).max(8_000),
+  plannedAdaptation: z.string().trim().min(20).max(8_000),
+});
+
+const importDecisionInput = z.object({
+  importCaseId: z.number().int().positive(),
+  note: z.string().trim().min(10).max(4_000),
+  rightsBasis: z.string().trim().min(10).max(500).optional(),
+  rightsEvidenceUrl: z.string().url().max(1024).optional(),
+});
+
+async function recordImportEvent(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  importCaseId: number,
+  actorUserId: number,
+  eventType: "submitted" | "rights_cleared" | "rejected" | "converted",
+  note?: string,
+) {
+  const [item] = await db.select().from(contentImportCases).where(eq(contentImportCases.id, importCaseId)).limit(1);
+  if (!item) return;
+  await db.insert(contentImportEvents).values({ importCaseId, actorUserId, eventType, note: note || null, snapshot: item, createdAt: Date.now() });
+}
 
 async function getTheorySnapshot(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, theoryUnitId: number): Promise<{ contentVersion: number; snapshot: TheoryVersionSnapshot }> {
   const [unit] = await db.select({ title: theoryUnits.title, slug: theoryUnits.slug, lead: theoryUnits.lead, bodyMarkdown: theoryUnits.bodyMarkdown, sourceKind: theoryUnits.sourceKind, sourceTitle: theoryUnits.sourceTitle, sourceUrl: theoryUnits.sourceUrl, contentVersion: theoryUnits.contentVersion }).from(theoryUnits).where(eq(theoryUnits.id, theoryUnitId)).limit(1);
@@ -313,6 +345,100 @@ export const schoolRouter = router({
         db.select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId)).orderBy(asc(examTaskTypes.sortOrder)),
       ]);
       return { topics, taskTypes };
+    }),
+    importCases: adminProcedure.query(async () => {
+      const { db, trackId } = await getMathTrack();
+      return db
+        .select({
+          id: contentImportCases.id,
+          status: contentImportCases.status,
+          sourceKind: contentImportCases.sourceKind,
+          sourceTitle: contentImportCases.sourceTitle,
+          sourceUrl: contentImportCases.sourceUrl,
+          sourceRecordId: contentImportCases.sourceRecordId,
+          proposedTitle: contentImportCases.proposedTitle,
+          sourceSummary: contentImportCases.sourceSummary,
+          plannedAdaptation: contentImportCases.plannedAdaptation,
+          rightsBasis: contentImportCases.rightsBasis,
+          rightsEvidenceUrl: contentImportCases.rightsEvidenceUrl,
+          legalReviewNote: contentImportCases.legalReviewNote,
+          reviewedAt: contentImportCases.reviewedAt,
+          createdAt: contentImportCases.createdAt,
+          kimNumber: examTaskTypes.kimNumber,
+          taskTypeTitle: examTaskTypes.title,
+          submittedBy: users.name,
+          convertedTaskId: contentImportCases.convertedTaskId,
+        })
+        .from(contentImportCases)
+        .innerJoin(examTaskTypes, eq(contentImportCases.examTaskTypeId, examTaskTypes.id))
+        .leftJoin(users, eq(contentImportCases.submittedByUserId, users.id))
+        .where(eq(contentImportCases.examTrackId, trackId))
+        .orderBy(desc(contentImportCases.updatedAt));
+    }),
+    importCaseEvents: adminProcedure.input(z.object({ importCaseId: z.number().int().positive() })).query(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [item] = await db.select({ id: contentImportCases.id }).from(contentImportCases).where(and(eq(contentImportCases.id, input.importCaseId), eq(contentImportCases.examTrackId, trackId))).limit(1);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Карточка импорта не найдена." });
+      return db.select({ id: contentImportEvents.id, eventType: contentImportEvents.eventType, note: contentImportEvents.note, snapshot: contentImportEvents.snapshot, createdAt: contentImportEvents.createdAt, actorName: users.name }).from(contentImportEvents).leftJoin(users, eq(contentImportEvents.actorUserId, users.id)).where(eq(contentImportEvents.importCaseId, input.importCaseId)).orderBy(desc(contentImportEvents.createdAt));
+    }),
+    submitImportCase: adminProcedure.input(importCaseInput).mutation(async ({ ctx, input }) => {
+      const { db, trackId, subjectId } = await getMathTrack();
+      const [taskType] = await db.select({ id: examTaskTypes.id }).from(examTaskTypes).where(and(eq(examTaskTypes.examTrackId, trackId), eq(examTaskTypes.kimNumber, input.kimNumber))).limit(1);
+      if (!taskType) throw new TRPCError({ code: "BAD_REQUEST", message: "Номер КИМ не найден в активной структуре экзамена." });
+      const timestamp = Date.now();
+      const inserted = await db.insert(contentImportCases).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType.id, sourceKind: input.sourceKind, sourceTitle: input.sourceTitle, sourceUrl: input.sourceUrl, sourceRecordId: input.sourceRecordId || null, sourceAccessedAt: timestamp, proposedTitle: input.proposedTitle, sourceSummary: input.sourceSummary, plannedAdaptation: input.plannedAdaptation, status: "rights_review", submittedByUserId: ctx.user.id, createdAt: timestamp, updatedAt: timestamp });
+      const importCaseId = Number(inserted[0].insertId);
+      await recordImportEvent(db, importCaseId, ctx.user.id, "submitted", "Карточка отправлена на обязательную правовую проверку.");
+      return { importCaseId };
+    }),
+    clearImportCase: adminProcedure.input(importDecisionInput).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [item] = await db.select({ id: contentImportCases.id, status: contentImportCases.status }).from(contentImportCases).where(and(eq(contentImportCases.id, input.importCaseId), eq(contentImportCases.examTrackId, trackId))).limit(1);
+      if (!item || item.status !== "rights_review") throw new TRPCError({ code: "BAD_REQUEST", message: "На проверку можно отправить только новую карточку импорта." });
+      const timestamp = Date.now();
+      await db.update(contentImportCases).set({ status: "cleared", rightsBasis: input.rightsBasis || null, rightsEvidenceUrl: input.rightsEvidenceUrl || null, legalReviewNote: input.note, reviewedByUserId: ctx.user.id, reviewedAt: timestamp, updatedAt: timestamp }).where(eq(contentImportCases.id, input.importCaseId));
+      await recordImportEvent(db, input.importCaseId, ctx.user.id, "rights_cleared", input.note);
+      return { importCaseId: input.importCaseId };
+    }),
+    rejectImportCase: adminProcedure.input(importDecisionInput).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [item] = await db.select({ id: contentImportCases.id, status: contentImportCases.status }).from(contentImportCases).where(and(eq(contentImportCases.id, input.importCaseId), eq(contentImportCases.examTrackId, trackId))).limit(1);
+      if (!item || item.status !== "rights_review") throw new TRPCError({ code: "BAD_REQUEST", message: "Отклонить можно только новую карточку импорта." });
+      const timestamp = Date.now();
+      await db.update(contentImportCases).set({ status: "rejected", legalReviewNote: input.note, reviewedByUserId: ctx.user.id, reviewedAt: timestamp, updatedAt: timestamp }).where(eq(contentImportCases.id, input.importCaseId));
+      await recordImportEvent(db, input.importCaseId, ctx.user.id, "rejected", input.note);
+      return { importCaseId: input.importCaseId };
+    }),
+    convertImportCase: adminProcedure.input(z.object({ importCaseId: z.number().int().positive(), slug: z.string().regex(/^[a-z0-9-]+$/), title: z.string().trim().min(4).max(220), statementMarkdown: z.string().trim().min(10), solutionMarkdown: z.string().trim().min(10), topicSlug: z.string().trim().min(1), difficulty: z.enum(["basic", "standard", "advanced"]), answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]), correctAnswer: z.string().trim().max(1024).optional() })).mutation(async ({ ctx, input }) => {
+      const { db, trackId, subjectId } = await getMathTrack();
+      const [item, topic] = await Promise.all([
+        db.select().from(contentImportCases).where(and(eq(contentImportCases.id, input.importCaseId), eq(contentImportCases.examTrackId, trackId))).limit(1),
+        db.select({ id: curriculumUnits.id }).from(curriculumUnits).where(and(eq(curriculumUnits.subjectId, subjectId), eq(curriculumUnits.slug, input.topicSlug))).limit(1),
+      ]);
+      const source = item[0];
+      if (!source || source.status !== "cleared" || source.convertedTaskId || !topic[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Импорт должен быть одобрен и ещё не сконвертирован; тема должна существовать." });
+      if (input.answerKind !== "manual" && !input.correctAnswer) throw new TRPCError({ code: "BAD_REQUEST", message: "Для автоматически проверяемой задачи укажите ответ." });
+      const timestamp = Date.now();
+      const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: source.examTaskTypeId, slug: input.slug, title: input.title, statementMarkdown: input.statementMarkdown, answerKind: input.answerKind, correctAnswer: input.correctAnswer || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown, difficulty: input.difficulty, sourceKind: source.sourceKind, sourceTitle: source.sourceTitle, sourceUrl: source.sourceUrl, sourceRecordId: source.sourceRecordId, sourceAccessedAt: source.sourceAccessedAt, contentVersion: 1, status: "draft", createdAt: timestamp, updatedAt: timestamp });
+      const taskId = Number(inserted[0].insertId);
+      await db.insert(taskCurriculumUnits).values({ taskId, curriculumUnitId: topic[0].id });
+      await db.update(contentImportCases).set({ status: "converted", convertedTaskId: taskId, updatedAt: timestamp }).where(eq(contentImportCases.id, source.id));
+      await recordTaskEvent(db, taskId, ctx.user.id, "created", `Черновик создан из правового импорта #${source.id}.`);
+      await recordImportEvent(db, source.id, ctx.user.id, "converted", `Создан редакторский черновик задачи #${taskId}.`);
+      return { taskId };
+    }),
+    externalMediaQueue: adminProcedure.query(async () => {
+      const { db, trackId } = await getMathTrack();
+      return db.select({ id: taskVisuals.id, taskId: taskVisuals.taskId, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption, sourceUrl: taskVisuals.sourceUrl, placement: taskVisuals.placement, reviewStatus: taskVisuals.reviewStatus, reviewNote: taskVisuals.reviewNote, createdAt: taskVisuals.createdAt, taskTitle: tasks.title, taskSlug: tasks.slug, kimNumber: examTaskTypes.kimNumber }).from(taskVisuals).innerJoin(tasks, eq(taskVisuals.taskId, tasks.id)).innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id)).where(and(eq(tasks.examTrackId, trackId), eq(taskVisuals.sourceKind, "external"), eq(taskVisuals.reviewStatus, "review"))).orderBy(asc(taskVisuals.createdAt));
+    }),
+    moderateExternalMedia: adminProcedure.input(z.object({ visualId: z.number().int().positive(), decision: z.enum(["approved", "rejected"]), note: z.string().trim().min(10).max(2_000) })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [visual] = await db.select({ id: taskVisuals.id, taskId: taskVisuals.taskId, reviewStatus: taskVisuals.reviewStatus }).from(taskVisuals).innerJoin(tasks, eq(taskVisuals.taskId, tasks.id)).where(and(eq(taskVisuals.id, input.visualId), eq(tasks.examTrackId, trackId), eq(taskVisuals.sourceKind, "external"))).limit(1);
+      if (!visual || visual.reviewStatus !== "review") throw new TRPCError({ code: "BAD_REQUEST", message: "Изображение не ожидает решения модератора." });
+      const timestamp = Date.now();
+      await db.update(taskVisuals).set({ reviewStatus: input.decision, reviewNote: input.note, reviewedByUserId: ctx.user.id, reviewedAt: timestamp, updatedAt: timestamp }).where(eq(taskVisuals.id, visual.id));
+      await recordTaskEvent(db, visual.taskId, ctx.user.id, input.decision === "approved" ? "media_approved" : "media_rejected", input.note);
+      return { visualId: visual.id, reviewStatus: input.decision };
     }),
     getTask: adminProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
       const { db, trackId } = await getMathTrack();

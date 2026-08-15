@@ -1,0 +1,29 @@
+import { PlatformHeader } from "@/components/PlatformHeader";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
+import { ArrowRight, BookOpenCheck, Layers3, Loader2, Sparkles } from "lucide-react";
+import { Link, useRoute } from "wouter";
+
+function Shell({ children }: { children: React.ReactNode }) { return <div className="theme-page min-h-screen"><PlatformHeader /><main className="container py-10 sm:py-14">{children}</main></div>; }
+
+export function SubjectCatalog() {
+  const subjects = trpc.catalog.subjects.useQuery();
+  return <Shell><section className="theme-surface rounded-[28px] border p-7 sm:p-10"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Школа 911 / старт</p><h1 className="mt-4 max-w-3xl text-4xl font-bold tracking-[-.055em] sm:text-6xl">Выберите предмет</h1><p className="theme-muted mt-4 max-w-2xl leading-7">Сначала предмет, затем экзамен. На следующем шаге можно перейти в банк по номерам КИМ или открыть готовый вариант.</p></section><section className="mt-7 grid gap-5 md:grid-cols-2">{subjects.isLoading ? <Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /> : subjects.data?.map(subject => <Link key={subject.slug} href={`/subjects/${subject.slug}`}><article className="theme-surface group rounded-2xl border p-6 transition hover:border-[#ff5b14]/45"><Layers3 className="h-6 w-6 text-[#ff7a35]" /><h2 className="mt-5 text-2xl font-bold">{subject.title}</h2><p className="theme-muted mt-2 text-sm leading-6">{subject.description}</p><span className="mt-6 inline-flex items-center text-sm font-bold text-[#ff8b4b]">Выбрать экзамен <ArrowRight className="ml-2 h-4 w-4" /></span></article></Link>)}</section></Shell>;
+}
+
+export function ExamTracks() {
+  const [, params] = useRoute("/subjects/:subjectSlug"); const subjectSlug = params?.subjectSlug ?? "";
+  const tracks = trpc.catalog.examTracks.useQuery({ subjectSlug }, { enabled: !!subjectSlug });
+  return <Shell><section className="theme-surface rounded-[28px] border p-7 sm:p-10"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Предмет / экзамен</p><h1 className="mt-4 text-4xl font-bold tracking-[-.055em] sm:text-5xl">Выберите экзамен</h1><p className="theme-muted mt-4 text-sm leading-6">Траектория показывает только реально доступный контент. Пустые направления отмечаются заранее, без фиктивных заданий.</p></section><section className="mt-7 grid gap-5 md:grid-cols-2">{tracks.isLoading ? <Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /> : tracks.data?.map(track => <Link key={track.slug} href={`/subjects/${track.subjectSlug}/${track.slug}`}><article className="theme-surface rounded-2xl border p-6 transition hover:border-[#ff5b14]/45"><div className="flex items-center justify-between"><Badge className="border-0 bg-[#ff5b14]/14 text-[#ff8b4b] hover:bg-[#ff5b14]/14">{track.examKind.toUpperCase()}</Badge><span className="text-xs text-[#aaa7ae]">{track.taskCount ? `${track.taskCount} заданий` : "готовится"}</span></div><h2 className="mt-5 text-2xl font-bold">{track.title}</h2><p className="theme-muted mt-2 text-sm leading-6">{track.description}</p><span className="mt-6 inline-flex items-center text-sm font-bold text-[#ff8b4b]">Открыть траекторию <ArrowRight className="ml-2 h-4 w-4" /></span></article></Link>)}</section></Shell>;
+}
+
+export function ExamTrackLanding() {
+  const [, params] = useRoute("/subjects/:subjectSlug/:trackSlug"); const subjectSlug = params?.subjectSlug ?? ""; const trackSlug = params?.trackSlug ?? "";
+  const overview = trpc.catalog.trackOverview.useQuery({ subjectSlug, trackSlug }, { enabled: !!subjectSlug && !!trackSlug });
+  if (overview.isLoading) return <Shell><Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /></Shell>;
+  const data = overview.data;
+  if (!data) return <Shell><p className="theme-muted">Траектория не найдена.</p></Shell>;
+  const available = data.taskCount > 0;
+  return <Shell><section className="theme-surface rounded-[28px] border p-7 sm:p-10"><Badge className="border-0 bg-[#ff5b14]/14 text-[#ff8b4b] hover:bg-[#ff5b14]/14">{data.track.examKind.toUpperCase()} · {data.track.subjectTitle}</Badge><h1 className="mt-5 text-4xl font-bold tracking-[-.055em] sm:text-6xl">{data.track.title}</h1><p className="theme-muted mt-4 max-w-2xl leading-7">{data.track.description}</p>{available ? <p className="mt-5 text-sm font-bold text-emerald-300">В банке: {data.taskCount} авторских заданий · {data.taskTypes.length} номеров КИМ</p> : <p className="mt-5 text-sm font-bold text-amber-200">Контент проходит калибровку. Маршрут сохранён, но задания ещё не публикуются.</p>}</section><section className="mt-7 grid gap-5 md:grid-cols-2"><article className="theme-surface rounded-2xl border p-6"><BookOpenCheck className="h-6 w-6 text-[#ff7a35]" /><h2 className="mt-5 text-2xl font-bold">Банк заданий</h2><p className="theme-muted mt-2 text-sm leading-6">Фильтр по номеру КИМ, части, теме и сложности.</p>{available && trackSlug === "oge-mathematics" ? <Link href="/bank"><Button className="mt-6 bg-[#ff5b14] text-[#101014] hover:bg-[#ff7a35]">Открыть банк</Button></Link> : <Button disabled className="mt-6">Наполнение готовится</Button>}</article><article className="theme-surface rounded-2xl border p-6"><Sparkles className="h-6 w-6 text-[#ff7a35]" /><h2 className="mt-5 text-2xl font-bold">Варианты</h2><p className="theme-muted mt-2 text-sm leading-6">Готовые ежемесячные варианты или одноразовая сборка из банка.</p>{available && trackSlug === "oge-mathematics" ? <Link href="/variants"><Button variant="outline" className="mt-6 border-[#ff5b14]/35 text-[#ffb187]">Перейти к вариантам</Button></Link> : <Button disabled className="mt-6">Недоступно до наполнения</Button>}</article></section></Shell>;
+}

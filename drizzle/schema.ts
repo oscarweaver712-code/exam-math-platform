@@ -398,6 +398,55 @@ export const tasks = mysqlTable(
   ],
 );
 
+/** A manually registered external-content case. It must clear rights review before a task draft can be created. */
+export const contentImportCases = mysqlTable(
+  "content_import_cases",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    subjectId: int("subjectId").notNull().references(() => subjects.id, { onDelete: "restrict" }),
+    examTrackId: int("examTrackId").notNull().references(() => examTracks.id, { onDelete: "restrict" }),
+    examTaskTypeId: int("examTaskTypeId").notNull().references(() => examTaskTypes.id, { onDelete: "restrict" }),
+    sourceKind: mysqlEnum("sourceKind", ["fipi", "partner"]).notNull(),
+    sourceTitle: varchar("sourceTitle", { length: 255 }).notNull(),
+    sourceUrl: varchar("sourceUrl", { length: 1024 }).notNull(),
+    sourceRecordId: varchar("sourceRecordId", { length: 255 }),
+    sourceAccessedAt: bigint("sourceAccessedAt", { mode: "number" }).notNull(),
+    proposedTitle: varchar("proposedTitle", { length: 220 }).notNull(),
+    sourceSummary: text("sourceSummary").notNull(),
+    plannedAdaptation: text("plannedAdaptation").notNull(),
+    rightsBasis: varchar("rightsBasis", { length: 500 }),
+    rightsEvidenceUrl: varchar("rightsEvidenceUrl", { length: 1024 }),
+    status: mysqlEnum("status", ["rights_review", "cleared", "rejected", "converted"]).default("rights_review").notNull(),
+    legalReviewNote: text("legalReviewNote"),
+    submittedByUserId: int("submittedByUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: bigint("reviewedAt", { mode: "number" }),
+    convertedTaskId: int("convertedTaskId").references(() => tasks.id, { onDelete: "set null" }),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    index("content_import_cases_track_status_idx").on(table.examTrackId, table.status, table.createdAt),
+    index("content_import_cases_type_idx").on(table.examTaskTypeId),
+    uniqueIndex("content_import_cases_converted_task_unique").on(table.convertedTaskId),
+  ],
+);
+
+/** Immutable decisions for manual external-content intake. */
+export const contentImportEvents = mysqlTable(
+  "content_import_events",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    importCaseId: int("importCaseId").notNull().references(() => contentImportCases.id, { onDelete: "cascade" }),
+    actorUserId: int("actorUserId").notNull().references(() => users.id, { onDelete: "restrict" }),
+    eventType: mysqlEnum("eventType", ["submitted", "rights_cleared", "rejected", "converted"]).notNull(),
+    note: text("note"),
+    snapshot: json("snapshot").$type<Record<string, unknown>>(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  },
+  table => [index("content_import_events_case_created_idx").on(table.importCaseId, table.createdAt)],
+);
+
 /** Immutable record of editorial actions for a task. Soft deletion preserves this audit trail. */
 export const taskEditorialEvents = mysqlTable(
   "task_editorial_events",
@@ -409,7 +458,7 @@ export const taskEditorialEvents = mysqlTable(
     editorUserId: int("editorUserId")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    eventType: mysqlEnum("eventType", ["created", "updated", "published", "archived", "restored", "soft_deleted", "source_updated", "media_added", "media_removed"])
+    eventType: mysqlEnum("eventType", ["created", "updated", "published", "archived", "restored", "soft_deleted", "source_updated", "media_added", "media_approved", "media_rejected", "media_removed"])
       .notNull(),
     note: varchar("note", { length: 500 }),
     snapshot: json("snapshot").$type<Record<string, unknown>>(),
@@ -439,6 +488,9 @@ export const taskVisuals = mysqlTable(
     sourceKind: mysqlEnum("sourceKind", ["author", "external"]).default("author").notNull(),
     sourceUrl: varchar("sourceUrl", { length: 2048 }),
     reviewStatus: mysqlEnum("reviewStatus", ["draft", "review", "approved", "rejected"]).default("draft").notNull(),
+    reviewedByUserId: int("reviewedByUserId").references(() => users.id, { onDelete: "set null" }),
+    reviewedAt: bigint("reviewedAt", { mode: "number" }),
+    reviewNote: text("reviewNote"),
     sortOrder: int("sortOrder").default(0).notNull(),
     createdAt: bigint("createdAt", { mode: "number" }).notNull(),
     updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
@@ -447,6 +499,66 @@ export const taskVisuals = mysqlTable(
     index("task_visuals_task_placement_idx").on(table.taskId, table.placement, table.sortOrder),
     index("task_visuals_review_idx").on(table.reviewStatus),
   ],
+);
+
+/** A fixed examination-style set assembled from published author tasks. */
+export const examVariants = mysqlTable(
+  "exam_variants",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    examTrackId: int("examTrackId").notNull().references(() => examTracks.id, { onDelete: "restrict" }),
+    slug: varchar("slug", { length: 160 }).notNull(),
+    title: varchar("title", { length: 220 }).notNull(),
+    origin: mysqlEnum("origin", ["monthly", "manual"]).default("monthly").notNull(),
+    monthKey: varchar("monthKey", { length: 7 }),
+    status: mysqlEnum("status", ["draft", "published", "archived"]).default("draft").notNull(),
+    generatedAt: bigint("generatedAt", { mode: "number" }).notNull(),
+    publishedAt: bigint("publishedAt", { mode: "number" }),
+    createdByUserId: int("createdByUserId").references(() => users.id, { onDelete: "set null" }),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    uniqueIndex("exam_variants_track_slug_unique").on(table.examTrackId, table.slug),
+    uniqueIndex("exam_variants_track_month_unique").on(table.examTrackId, table.monthKey),
+    index("exam_variants_track_status_published_idx").on(table.examTrackId, table.status, table.publishedAt),
+  ],
+);
+
+/** Frozen membership and ordering of one generated examination variant. */
+export const examVariantItems = mysqlTable(
+  "exam_variant_items",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    examVariantId: int("examVariantId").notNull().references(() => examVariants.id, { onDelete: "cascade" }),
+    taskId: int("taskId").notNull().references(() => tasks.id, { onDelete: "restrict" }),
+    taskContentVersion: int("taskContentVersion").notNull(),
+    sortOrder: int("sortOrder").notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+  },
+  table => [
+    uniqueIndex("exam_variant_items_variant_task_unique").on(table.examVariantId, table.taskId),
+    uniqueIndex("exam_variant_items_variant_order_unique").on(table.examVariantId, table.sortOrder),
+    index("exam_variant_items_task_idx").on(table.taskId),
+  ],
+);
+
+/** Durable owner-managed configuration for a project-level monthly variant job. */
+export const variantGenerationSchedules = mysqlTable(
+  "variant_generation_schedules",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    examTrackId: int("examTrackId").notNull().references(() => examTracks.id, { onDelete: "cascade" }),
+    scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+    cronExpression: varchar("cronExpression", { length: 64 }).notNull(),
+    isActive: boolean("isActive").default(true).notNull(),
+    lastGeneratedMonthKey: varchar("lastGeneratedMonthKey", { length: 7 }),
+    lastGeneratedAt: bigint("lastGeneratedAt", { mode: "number" }),
+    lastError: text("lastError"),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [uniqueIndex("variant_generation_schedules_track_unique").on(table.examTrackId)],
 );
 
 /** Progressive help that learners reveal intentionally before seeing a full solution. */

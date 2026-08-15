@@ -3,6 +3,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
 import {
+  contentImportCases,
+  contentImportEvents,
   homeworkAssignments,
   homeworkItems,
   learningPromos,
@@ -10,6 +12,7 @@ import {
   subjects,
   taskEditorialEvents,
   taskTheoryUnits,
+  taskVisuals,
   tasks,
   theoryCurriculumUnits,
   theoryExamTracks,
@@ -42,6 +45,7 @@ describe("public bank and tutor homework flow", () => {
   let temporaryTaskIds: number[] = [];
   let temporaryTheoryIds: number[] = [];
   let temporaryPromoIds: number[] = [];
+  let temporaryImportCaseIds: number[] = [];
 
   afterEach(async () => {
     const db = await getDb();
@@ -64,7 +68,10 @@ describe("public bank and tutor homework flow", () => {
       await db.delete(theoryUnits).where(inArray(theoryUnits.id, temporaryTheoryIds));
     }
     if (temporaryPromoIds.length) await db.delete(learningPromos).where(inArray(learningPromos.id, temporaryPromoIds));
+    if (temporaryImportCaseIds.length) await db.delete(contentImportEvents).where(inArray(contentImportEvents.importCaseId, temporaryImportCaseIds));
     if (temporaryTaskIds.length) await db.delete(taskEditorialEvents).where(inArray(taskEditorialEvents.taskId, temporaryTaskIds));
+    if (temporaryTaskIds.length) await db.delete(taskVisuals).where(inArray(taskVisuals.taskId, temporaryTaskIds));
+    if (temporaryImportCaseIds.length) await db.delete(contentImportCases).where(inArray(contentImportCases.id, temporaryImportCaseIds));
     if (tutorId) await db.delete(users).where(eq(users.id, tutorId));
     if (studentId) await db.delete(users).where(eq(users.id, studentId));
     if (adminId) await db.delete(users).where(eq(users.id, adminId));
@@ -72,12 +79,25 @@ describe("public bank and tutor homework flow", () => {
     temporaryTaskIds = [];
     temporaryTheoryIds = [];
     temporaryPromoIds = [];
+    temporaryImportCaseIds = [];
   });
 
   it("returns the published prototype tasks to a visitor without authentication", async () => {
     const caller = appRouter.createCaller(createContext(null));
+    const overview = await caller.publicBank.overview();
+    expect(overview.taskTypes.map(item => item.kimNumber)).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)));
+    expect(overview.taskTypes.filter(item => item.part === "part1")).toHaveLength(19);
+    expect(overview.taskTypes.filter(item => item.part === "part2")).toHaveLength(6);
     const listing = await caller.publicBank.listTasks({});
     expect(listing.length).toBeGreaterThan(0);
+    expect(new Set(listing.map(item => item.kimNumber))).toEqual(new Set(Array.from({ length: 25 }, (_, index) => String(index + 1))));
+    const variants = await caller.publicBank.listVariants();
+    expect(variants.length).toBeGreaterThan(0);
+    const publishedVariant = await caller.publicBank.getVariant({ slug: variants[0].slug });
+    expect(publishedVariant.items).toHaveLength(25);
+    expect(publishedVariant.items.map(item => item.sortOrder)).toEqual(Array.from({ length: 25 }, (_, index) => index + 1));
+    const ephemeralVariant = await caller.publicBank.generateSessionVariant({ entropy: `${suffix}-ephemeral` });
+    expect(ephemeralVariant).toHaveLength(25);
     const details = await caller.publicBank.getTask({ slug: listing[0].slug });
     expect(details.title).toBe(listing[0].title);
     expect(details.part).toBe("part1");
@@ -246,6 +266,39 @@ describe("public bank and tutor homework flow", () => {
       expect(listing.some(task => task.slug === slug)).toBe(false);
       await expect(publicCaller.publicBank.getTask({ slug })).rejects.toMatchObject({ code: "NOT_FOUND" });
     }
+  });
+
+  it("requires legal clearance before converting an import and separately moderates external task media", async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable for intake test");
+    const openId = `${suffix}-intake-admin`;
+    await db.insert(users).values({ openId, email: `${suffix}-intake-admin@example.test`, name: "Правовой редактор", loginMethod: "test", role: "admin", lastSignedIn: new Date() });
+    const [created] = await db.select({ id: users.id }).from(users).where(eq(users.openId, openId)).limit(1);
+    adminId = created?.id ?? null;
+    if (!adminId) throw new Error("Intake admin was not created");
+    const adminCaller = appRouter.createCaller(createContext(testUser(adminId, openId, `${suffix}-intake-admin@example.test`, "Правовой редактор", "admin")));
+    const blockedCaller = appRouter.createCaller(createContext(testUser(adminId + 80_000, `${suffix}-intake-student`, `${suffix}-intake-student@example.test`, "Ученик", "user")));
+    const options = await adminCaller.school.admin.options();
+    const kimNumber = options.taskTypes[0]?.kimNumber;
+    const topicSlug = options.topics[0]?.slug;
+    if (!kimNumber || !topicSlug) throw new Error("Task editor options unavailable");
+    const intakeInput = { kimNumber, sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: `legal-fixture-${suffix}`, proposedTitle: "Авторская адаптация задачи", sourceSummary: "Редактор зарегистрировал карточку внешнего материала для проверки происхождения и допустимого сценария использования.", plannedAdaptation: "Редакция создаст самостоятельную тренировочную задачу с новыми числами, новой формулировкой и авторским решением." };
+    await expect(blockedCaller.school.admin.submitImportCase(intakeInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const createdCase = await adminCaller.school.admin.submitImportCase(intakeInput);
+    temporaryImportCaseIds.push(createdCase.importCaseId);
+    const convertInput = { importCaseId: createdCase.importCaseId, slug: `legal-adaptation-${suffix}`, title: "Авторская адаптация задачи", statementMarkdown: "Решите редакторскую тренировочную задачу и запишите ответ.", solutionMarkdown: "Проведите вычисления последовательно и проверьте полученный результат.", topicSlug, difficulty: "basic" as const, answerKind: "short_integer" as const, correctAnswer: "7" };
+    await expect(adminCaller.school.admin.convertImportCase(convertInput)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await adminCaller.school.admin.clearImportCase({ importCaseId: createdCase.importCaseId, note: "Условия использования проверены; разрешена редакторская адаптация без копирования исходной формулировки.", rightsBasis: "Проверено редактором по зарегистрированному источнику.", rightsEvidenceUrl: "https://fipi.ru/oge/demoversii-specifikacii-kodifikatory" });
+    const converted = await adminCaller.school.admin.convertImportCase(convertInput);
+    temporaryTaskIds.push(converted.taskId);
+    await expect(adminCaller.school.admin.importCases()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: createdCase.importCaseId, status: "converted", convertedTaskId: converted.taskId })]));
+    const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl4xGQAAAAASUVORK5CYII=";
+    const uploaded = await adminCaller.school.admin.uploadTaskMedia({ taskId: converted.taskId, placement: "statement", altText: "Тестовое внешнее изображение для проверки модерации.", sourceKind: "external", sourceUrl: "https://example.test/image-source", fileName: "review.png", contentType: "image/png", dataUrl });
+    await expect(adminCaller.school.admin.externalMediaQueue()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, taskId: converted.taskId })]));
+    await expect(blockedCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await adminCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." });
+    await expect(adminCaller.school.admin.getTask({ taskId: converted.taskId })).resolves.toEqual(expect.objectContaining({ visuals: expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, reviewStatus: "approved" })]) }));
+    await expect(adminCaller.school.admin.importCaseEvents({ importCaseId: createdCase.importCaseId })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "submitted" }), expect.objectContaining({ eventType: "rights_cleared" }), expect.objectContaining({ eventType: "converted" })]));
   });
 
   it("keeps source metadata and the archive lifecycle under administrator control", async () => {
