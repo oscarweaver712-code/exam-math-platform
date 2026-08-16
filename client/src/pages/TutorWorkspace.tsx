@@ -45,7 +45,7 @@ export default function TutorWorkspace() {
   };
 
   if (!loading && !isAuthenticated) {
-    return <div className="min-h-screen bg-[#0b0b0d] text-[#f5f0e9]"><PlatformHeader /><main className="container py-16"><section className="orange-glow mx-auto max-w-xl rounded-[28px] bg-[#151518] p-8 sm:p-10"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Рабочее пространство</p><h1 className="mt-4 text-5xl font-bold leading-[.94] tracking-[-.065em]">Репетитор<br /><span className="text-[#ff5b14]">держит маршрут.</span></h1><p className="mt-6 leading-7 text-[#aaa7ae]">Войдите, чтобы приглашать учеников и выдавать им точную практику из открытого банка.</p><Button onClick={startLogin} className={`mt-8 ${orangeButton}`}>Войти в кабинет</Button></section></main></div>;
+    return <div className="min-h-screen bg-[#0b0b0d] text-[#f5f0e9]"><PlatformHeader /><main className="container py-16"><section className="orange-glow mx-auto max-w-xl rounded-[28px] bg-[#151518] p-8 sm:p-10"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Рабочее пространство</p><h1 className="mt-4 text-5xl font-bold leading-[.94] tracking-[-.065em]">Репетитор<br /><span className="text-[#ff5b14]">держит маршрут.</span></h1><p className="mt-6 leading-7 text-[#aaa7ae]">Войдите, чтобы приглашать учеников и выдавать им точную практику из открытого банка.</p><Button onClick={() => startLogin()} className={`mt-8 ${orangeButton}`}>Войти в кабинет</Button></section></main></div>;
   }
 
   if (loading || profile.isLoading) return <div className="min-h-screen bg-[#0b0b0d]"><PlatformHeader /><main className="container grid min-h-72 place-items-center"><Loader2 className="h-8 w-8 animate-spin text-[#ff5b14]" /></main></div>;

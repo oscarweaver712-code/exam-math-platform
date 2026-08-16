@@ -5,6 +5,7 @@ import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
 import TaskBank from "./pages/TaskBank";
 import TaskDetail from "./pages/TaskDetail";
 import Workspace from "./pages/Workspace";
@@ -27,6 +28,7 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/login"} component={Login} />
       <Route path={"/bank"} component={TaskBank} />
       <Route path={"/bank/:slug"} component={TaskDetail} />
       <Route path={"/subjects"} component={SubjectCatalog} />

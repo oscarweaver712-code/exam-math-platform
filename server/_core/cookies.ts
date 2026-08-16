@@ -42,7 +42,10 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    // First-party site: `lax` still survives the Telegram login redirect back
+    // to us, and unlike `none` it works over plain http in local development
+    // (browsers drop `SameSite=None` cookies that are not also `Secure`).
+    sameSite: "lax",
     secure: isSecureRequest(req),
   };
 }

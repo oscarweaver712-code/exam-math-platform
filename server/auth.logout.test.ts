@@ -18,7 +18,7 @@ function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] }
     openId: "sample-user",
     email: "sample@example.com",
     name: "Sample User",
-    loginMethod: "manus",
+    loginMethod: "telegram",
     role: "user",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -51,10 +51,13 @@ describe("auth.logout", () => {
     expect(result).toEqual({ success: true });
     expect(clearedCookies).toHaveLength(1);
     expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
+    // `sameSite: "lax"` — the app is served first-party now. `none` was only
+    // required while it ran inside the Manus preview iframe, and it breaks
+    // local development, where the cookie cannot also be `Secure`.
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });

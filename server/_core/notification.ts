@@ -1,114 +1,72 @@
-import { TRPCError } from "@trpc/server";
+/**
+ * Owner notifications over the Telegram Bot API.
+ *
+ * The same bot that signs people in delivers these, so there is no extra
+ * service to configure: the owner is whoever `OWNER_OPEN_ID` names, and the
+ * bot can message them as soon as they have pressed Start on it once.
+ */
+
 import { ENV } from "./env";
 
-export type NotificationPayload = {
-  title: string;
-  content: string;
-};
+const TELEGRAM_API = "https://api.telegram.org";
+const SEND_TIMEOUT_MS = 10_000;
 
-const TITLE_MAX_LENGTH = 1200;
-const CONTENT_MAX_LENGTH = 20000;
+/** Telegram chat id of the owner, derived from their `users.openId`. */
+function ownerChatId(): string | null {
+  const openId = ENV.ownerOpenId;
+  if (!openId.startsWith("tg:")) return null;
+  const id = openId.slice(3).trim();
+  return id || null;
+}
 
-const trimValue = (value: string): string => value.trim();
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
-
-const buildEndpointUrl = (baseUrl: string): string => {
-  const normalizedBase = baseUrl.endsWith("/")
-    ? baseUrl
-    : `${baseUrl}/`;
-  return new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    normalizedBase
-  ).toString();
-};
-
-const validatePayload = (input: NotificationPayload): NotificationPayload => {
-  if (!isNonEmptyString(input.title)) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Notification title is required.",
-    });
-  }
-  if (!isNonEmptyString(input.content)) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Notification content is required.",
-    });
-  }
-
-  const title = trimValue(input.title);
-  const content = trimValue(input.content);
-
-  if (title.length > TITLE_MAX_LENGTH) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`,
-    });
-  }
-
-  if (content.length > CONTENT_MAX_LENGTH) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`,
-    });
-  }
-
-  return { title, content };
-};
+/** Telegram parses a small HTML subset; anything user-supplied must be escaped. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 /**
- * Dispatches a project-owner notification through the Manus Notification Service.
- * Returns `true` if the request was accepted, `false` when the upstream service
- * cannot be reached (callers can fall back to email/slack). Validation errors
- * bubble up as TRPC errors so callers can fix the payload.
+ * Send the owner a message. Returns false instead of throwing: a failed
+ * notification must never break the action that triggered it.
  */
-export async function notifyOwner(
-  payload: NotificationPayload
-): Promise<boolean> {
-  const { title, content } = validatePayload(payload);
-
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service URL is not configured.",
-    });
+export async function notifyOwner(input: {
+  title: string;
+  content: string;
+}): Promise<boolean> {
+  const chatId = ownerChatId();
+  if (!ENV.telegramBotToken || !chatId) {
+    console.warn(
+      "[Notify] Skipped: set TELEGRAM_BOT_TOKEN and OWNER_OPEN_ID (tg:<id>) to enable owner notifications",
+    );
+    return false;
   }
 
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service API key is not configured.",
-    });
-  }
-
-  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
+  const text = `<b>${escapeHtml(input.title)}</b>\n\n${escapeHtml(input.content)}`;
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${TELEGRAM_API}/bot${ENV.telegramBotToken}/sendMessage`, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1",
-      },
-      body: JSON.stringify({ title, content }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      }),
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
 
     if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${
-          detail ? `: ${detail}` : ""
-        }`
-      );
+      // 403 here usually means the owner has never started a chat with the bot.
+      const detail = await response.text().catch(() => response.statusText);
+      console.error(`[Notify] Telegram refused the message (${response.status}): ${detail}`);
       return false;
     }
-
     return true;
   } catch (error) {
-    console.warn("[Notification] Error calling notification service:", error);
+    console.error("[Notify] Failed to reach Telegram:", error);
     return false;
   }
 }

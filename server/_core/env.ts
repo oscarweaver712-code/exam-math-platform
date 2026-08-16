@@ -1,10 +1,26 @@
 export const ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
+  /** Secret for signing session JWTs. Rotating it signs everyone out. */
   cookieSecret: process.env.JWT_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+
+  /** `users.openId` of the project owner, e.g. `tg:123456789`. */
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+
+  /** Telegram Login Widget. Both are required for sign-in to work. */
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
+
+  /** S3-compatible object storage (Cloudflare R2). */
+  s3Endpoint: process.env.S3_ENDPOINT ?? "",
+  s3Region: process.env.S3_REGION ?? "auto",
+  s3Bucket: process.env.S3_BUCKET ?? "",
+  s3AccessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
+  s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
+  /** Public base URL of the bucket, when it is served directly by a CDN. */
+  s3PublicUrl: process.env.S3_PUBLIC_URL ?? "",
+
+  /** Shared secret for scheduled job callbacks. */
+  cronSecret: process.env.CRON_SECRET ?? "",
+
   isProduction: process.env.NODE_ENV === "production",
-  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
-  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
 };
