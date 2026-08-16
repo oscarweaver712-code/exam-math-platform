@@ -56,6 +56,17 @@ export const adminProcedure = t.procedure.use(
   }),
 );
 
+export const ownerOrAdminProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    const role = ctx.user ? await resolveEditorialRole(ctx.user) : null;
+    if (role !== "owner" && role !== "admin") {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Выгрузка доступна только владельцу и активным администраторам." });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user! } });
+  }),
+);
+
 export const ownerProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

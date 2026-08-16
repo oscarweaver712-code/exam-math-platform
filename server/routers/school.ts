@@ -33,7 +33,7 @@ import {
   tutorSubjectSpecialties,
   users,
 } from "../../drizzle/schema";
-import { adminProcedure, ownerProcedure, protectedProcedure, router } from "../_core/trpc";
+import { adminProcedure, ownerOrAdminProcedure, ownerProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { ensureOgeSeedData } from "../ogeSeed";
 import { canCreateHomework } from "../learningPolicy";
@@ -351,6 +351,17 @@ export const schoolRouter = router({
     }),
   }),
   admin: router({
+    exportAccess: ownerOrAdminProcedure.query(() => ({ allowed: true })),
+    exportTasks: ownerOrAdminProcedure.input(z.object({ status: z.enum(["draft", "review", "published", "archived"]).optional(), limit: z.number().int().min(1).max(10000).default(5000) })).mutation(async ({ input }) => {
+      const { db, trackId } = await getMathTrack();
+      const filters = [eq(tasks.examTrackId, trackId)];
+      if (input.status) filters.push(eq(tasks.status, input.status));
+      const rows = await db.select({ catalogNumber: tasks.catalogNumber, internalId: tasks.internalId, title: tasks.title, slug: tasks.slug, statementMarkdown: tasks.statementMarkdown, solutionMarkdown: tasks.solutionMarkdown, correctAnswer: tasks.correctAnswer, answerKind: tasks.answerKind, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, sourceExamYear: tasks.sourceExamYear, createdAt: tasks.createdAt, updatedAt: tasks.updatedAt }).from(tasks).where(and(...filters)).orderBy(asc(tasks.catalogNumber)).limit(input.limit);
+      const csvCell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""').replace(/\r?\n/g, "\\n")}"`;
+      const header = ["catalogNumber", "internalId", "title", "slug", "statementMarkdown", "solutionMarkdown", "correctAnswer", "answerKind", "status", "sourceKind", "sourceTitle", "sourceUrl", "sourceRecordId", "sourceExamYear", "createdAt", "updatedAt"] as const;
+      const content = [header, ...rows.map(row => header.map(key => csvCell(row[key])))] .map(row => row.join(",")).join("\n");
+      return { filename: `school-911-tasks-${new Date().toISOString().slice(0, 10)}.csv`, content, rowCount: rows.length, truncated: rows.length === input.limit };
+    }),
     promos: adminProcedure.query(async () => {
       const { db, trackId } = await getMathTrack();
       return db.select().from(learningPromos).where(eq(learningPromos.examTrackId, trackId)).orderBy(desc(learningPromos.updatedAt));

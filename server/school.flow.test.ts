@@ -23,6 +23,7 @@ import {
   users,
 } from "../drizzle/schema";
 import type { TrpcContext } from "./_core/context";
+import { ENV } from "./_core/env";
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
@@ -203,6 +204,9 @@ describe("public bank and tutor homework flow", () => {
     const anonymous = appRouter.createCaller(createContext(null));
     await expect(anonymous.school.student.homework()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(anonymous.school.admin.theoryVersions({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(anonymous.school.admin.exportTasks({ limit: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const ownerCaller = appRouter.createCaller(createContext(testUser(999999, ENV.ownerOpenId, "owner@example.test", "Владелец")));
+    await expect(ownerCaller.school.admin.exportAccess()).resolves.toEqual({ allowed: true });
 
     const db = await getDb();
     if (!db) throw new Error("Database unavailable for role test");
@@ -347,6 +351,11 @@ describe("public bank and tutor homework flow", () => {
     await expect(adminCaller.school.admin.updateTaskSource({ taskId: createdTask.taskId, sourceKind: "fipi", sourceTitle: "", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceExamYear: 2026 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     expect((await publicCaller.publicBank.listTasks({})).items).toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId, sourceExamYear: 2026 })]));
     await expect(adminCaller.school.admin.tasks({ page: 1, pageSize: 6 })).resolves.toEqual(expect.objectContaining({ page: 1, pageSize: 6, items: expect.any(Array) }));
+    const exportResult = await adminCaller.school.admin.exportTasks({ status: "published", limit: 5 });
+    expect(exportResult.rowCount).toBeLessThanOrEqual(5);
+    expect(exportResult.filename).toMatch(/^school-911-tasks-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(exportResult.content.startsWith("catalogNumber,internalId" )).toBe(true);
+    expect(exportResult.content.split("\n").length).toBeLessThanOrEqual(6);
     await adminCaller.school.admin.archiveTask({ taskId: createdTask.taskId, note: "Снято на редакционную проверку" });
     expect((await publicCaller.publicBank.listTasks({})).items.some(task => task.slug === slug)).toBe(false);
     await adminCaller.school.admin.restoreTask({ taskId: createdTask.taskId, status: "published", note: "Проверка завершена" });
