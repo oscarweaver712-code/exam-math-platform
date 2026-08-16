@@ -13,6 +13,9 @@ describe("site-wide mobile navigation", () => {
     expect(source).toContain('title: "Учёба и аккаунт"');
     expect(source).not.toContain('title: "Кабинет"');
     expect(source).toContain('href: "/workspace"');
+    expect(source).toContain('href: "/tutor"');
+    expect(source).toContain('label: "Добавить задание"');
+    expect(source).not.toContain('Рабочий стол');
     expect(source).toContain('href: "/settings"');
     expect(source).toContain('title: "Управление"');
     expect(source).toContain('href: "/admin/access"');

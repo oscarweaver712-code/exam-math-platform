@@ -11,7 +11,7 @@ export function TutorTelegramBanner() {
         <img
           src="/manus-storage/school911-math-lessons-banner_fe3cd804.png"
           alt="Запись на индивидуальные и групповые занятия по математике, ЕГЭ и ОГЭ; QR-код и Telegram @yavalerachestno."
-          className="block h-auto w-full rounded-[14px] object-contain"
+          className="block max-h-[260px] w-full rounded-[14px] object-contain object-center"
         />
       </div>
     </a>

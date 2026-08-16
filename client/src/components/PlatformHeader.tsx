@@ -3,7 +3,7 @@ import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { trpc } from "@/lib/trpc";
-import { BookOpenCheck, ClipboardList, Compass, FileCheck2, GraduationCap, Home, Image, Inbox, LayoutDashboard, Library, Menu, Moon, Settings, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
+import { BookOpenCheck, ClipboardList, ClipboardPlus, Compass, FileCheck2, Home, Image, Inbox, Library, Menu, Moon, Settings, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -34,9 +34,10 @@ export function PlatformHeader() {
   const profile = trpc.profile.me.useQuery(undefined, { enabled: isAuthenticated });
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);  const accountLinks = [
-    { href: "/workspace", label: profile.data?.learningRole === "tutor" ? "Рабочий стол" : "Прогресс", icon: LayoutDashboard },
-    ...(profile.data?.learningRole === "tutor" ? [{ href: "/tutor", label: "Работа с учениками", icon: GraduationCap }] : []),
+  const [menuOpen, setMenuOpen] = useState(false);
+  const accountLinks = [
+    ...(profile.data?.learningRole === "tutor" ? [{ href: "/tutor", label: "Добавить задание", icon: ClipboardPlus }] : []),
+    { href: "/workspace", label: "Прогресс", icon: ClipboardList },
     { href: "/settings", label: "Настройки", icon: Settings },
   ];
   const navigationGroups = [
