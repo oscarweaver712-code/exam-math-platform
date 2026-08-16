@@ -167,7 +167,7 @@ async function recordImportEvent(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   importCaseId: number,
   actorUserId: number,
-  eventType: "submitted" | "rights_cleared" | "rejected" | "converted",
+  eventType: "submitted" | "assigned" | "rights_cleared" | "rejected" | "converted",
   note?: string,
 ) {
   const [item] = await db.select().from(contentImportCases).where(eq(contentImportCases.id, importCaseId)).limit(1);
@@ -413,6 +413,8 @@ export const schoolRouter = router({
           kimNumber: examTaskTypes.kimNumber,
           taskTypeTitle: examTaskTypes.title,
           submittedBy: users.name,
+          assignedEditorUserId: contentImportCases.assignedEditorUserId,
+          assignedAt: contentImportCases.assignedAt,
           convertedTaskId: contentImportCases.convertedTaskId,
         })
         .from(contentImportCases)
@@ -424,6 +426,30 @@ export const schoolRouter = router({
         .offset((input.page - 1) * input.pageSize);
       const total = Number(totalRow?.total ?? 0);
       return { items, total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
+    }),
+    editorialAssignees: adminProcedure.query(async () => {
+      const db = await requireDb();
+      return db
+        .select({ userId: users.id, name: users.name, email: users.email, role: editorialAccessRoles.role })
+        .from(editorialAccessRoles)
+        .innerJoin(users, eq(editorialAccessRoles.userId, users.id))
+        .where(and(eq(editorialAccessRoles.isActive, true), inArray(editorialAccessRoles.role, ["owner", "admin", "editor"])))
+        .orderBy(asc(users.name));
+    }),
+    assignImportEditor: adminProcedure.input(z.object({ importCaseId: z.number().int().positive(), editorUserId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const { db, trackId } = await getMathTrack();
+      const [itemRows, editorRows] = await Promise.all([
+        db.select({ id: contentImportCases.id, status: contentImportCases.status }).from(contentImportCases).where(and(eq(contentImportCases.id, input.importCaseId), eq(contentImportCases.examTrackId, trackId))).limit(1),
+        db.select({ id: editorialAccessRoles.id }).from(editorialAccessRoles).where(and(eq(editorialAccessRoles.userId, input.editorUserId), eq(editorialAccessRoles.isActive, true), inArray(editorialAccessRoles.role, ["owner", "admin", "editor"]))).limit(1),
+      ]);
+      const item = itemRows[0];
+      const editor = editorRows[0];
+      if (!item || item.status === "converted") throw new TRPCError({ code: "NOT_FOUND", message: "Материал не найден или уже сконвертирован." });
+      if (!editor) throw new TRPCError({ code: "BAD_REQUEST", message: "Выберите активного редактора." });
+      const timestamp = Date.now();
+      await db.update(contentImportCases).set({ assignedEditorUserId: input.editorUserId, assignedByUserId: ctx.user.id, assignedAt: timestamp, updatedAt: timestamp }).where(eq(contentImportCases.id, input.importCaseId));
+      await recordImportEvent(db, input.importCaseId, ctx.user.id, "assigned", "Материал назначен редактору для проверки.");
+      return { importCaseId: input.importCaseId, editorUserId: input.editorUserId };
     }),
     importCaseEvents: adminProcedure.input(z.object({ importCaseId: z.number().int().positive() })).query(async ({ input }) => {
       const { db, trackId } = await getMathTrack();

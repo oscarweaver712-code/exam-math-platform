@@ -78,6 +78,13 @@
       "when": 1786863528301,
       "tag": "0010_cold_thunderbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1786866482298,
+      "tag": "0011_tearful_wasp",
+      "breakpoints": true
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { ImportAssignmentControl } from "@/components/ImportAssignmentControl";
 import { PlatformHeader } from "@/components/PlatformHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,21 +10,126 @@ import { CheckCircle2, ChevronLeft, ChevronRight, FileImage, Gavel, Loader2, Shi
 import { useState } from "react";
 import { toast } from "sonner";
 
-type ImportForm = { kimNumber: string; sourceKind: "fipi" | "partner"; sourceTitle: string; sourceUrl: string; sourceRecordId: string; sourceExamYear: string; proposedTitle: string; sourceSummary: string; plannedAdaptation: string };
-const emptyForm: ImportForm = { kimNumber: "", sourceKind: "fipi", sourceTitle: "", sourceUrl: "", sourceRecordId: "", sourceExamYear: "2026", proposedTitle: "", sourceSummary: "", plannedAdaptation: "" };
+type ImportForm = {
+  kimNumber: string;
+  sourceKind: "fipi" | "partner";
+  sourceTitle: string;
+  sourceUrl: string;
+  sourceRecordId: string;
+  sourceExamYear: string;
+  proposedTitle: string;
+  sourceSummary: string;
+  plannedAdaptation: string;
+};
+
+const emptyForm: ImportForm = {
+  kimNumber: "",
+  sourceKind: "fipi",
+  sourceTitle: "",
+  sourceUrl: "",
+  sourceRecordId: "",
+  sourceExamYear: "2026",
+  proposedTitle: "",
+  sourceSummary: "",
+  plannedAdaptation: "",
+};
 
 function Pager({ page, pageCount, setPage }: { page: number; pageCount: number; setPage: (value: number) => void }) {
-  return <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3 text-xs"><span className="theme-muted">Страница {page} из {pageCount}</span><span className="flex gap-2"><Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button><Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button></span></div>;
+  return (
+    <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3 text-xs">
+      <span className="theme-muted">Страница {page} из {pageCount}</span>
+      <span className="flex gap-2">
+        <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft className="h-4 w-4" /></Button>
+        <Button size="sm" variant="outline" disabled={page >= pageCount} onClick={() => setPage(page + 1)}><ChevronRight className="h-4 w-4" /></Button>
+      </span>
+    </div>
+  );
 }
 
 export default function AdminIntake() {
-  const { user, loading } = useAuth(); const isAdmin = user?.role === "admin";
-  const [importPage, setImportPage] = useState(1); const [mediaPage, setMediaPage] = useState(1); const [notes, setNotes] = useState<Record<number, string>>({}); const [form, setForm] = useState<ImportForm>(emptyForm); const [convertId, setConvertId] = useState<number | null>(null); const [draft, setDraft] = useState({ slug: "", title: "", topicSlug: "", statementMarkdown: "", solutionMarkdown: "", answerKind: "short_integer" as "short_integer" | "short_decimal" | "short_text" | "manual", correctAnswer: "" });
-  const options = trpc.school.admin.options.useQuery(undefined, { enabled: isAdmin }); const imports = trpc.school.admin.importCases.useQuery({ page: importPage, pageSize: 8 }, { enabled: isAdmin }); const media = trpc.school.admin.externalMediaQueue.useQuery({ page: mediaPage, pageSize: 8 }, { enabled: isAdmin });
-  const refresh = (message: string) => { imports.refetch(); media.refetch(); toast.success(message); };
-  const submit = trpc.school.admin.submitImportCase.useMutation({ onSuccess: () => { setImportPage(1); setForm(emptyForm); refresh("Карточка передана на проверку."); }, onError: error => toast.error(error.message) }); const clear = trpc.school.admin.clearImportCase.useMutation({ onSuccess: () => refresh("Правовое основание зафиксировано."), onError: error => toast.error(error.message) }); const reject = trpc.school.admin.rejectImportCase.useMutation({ onSuccess: () => refresh("Импорт отклонён."), onError: error => toast.error(error.message) }); const convert = trpc.school.admin.convertImportCase.useMutation({ onSuccess: () => { setConvertId(null); refresh("Создан редакторский черновик."); }, onError: error => toast.error(error.message) }); const moderate = trpc.school.admin.moderateExternalMedia.useMutation({ onSuccess: () => refresh("Решение по изображению сохранено."), onError: error => toast.error(error.message) });
+  const { user, loading } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const [importPage, setImportPage] = useState(1);
+  const [mediaPage, setMediaPage] = useState(1);
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const [form, setForm] = useState<ImportForm>(emptyForm);
+  const [convertId, setConvertId] = useState<number | null>(null);
+  const [draft, setDraft] = useState({ slug: "", title: "", topicSlug: "", statementMarkdown: "", solutionMarkdown: "", answerKind: "short_integer" as "short_integer" | "short_decimal" | "short_text" | "manual", correctAnswer: "" });
+
+  const options = trpc.school.admin.options.useQuery(undefined, { enabled: isAdmin });
+  const imports = trpc.school.admin.importCases.useQuery({ page: importPage, pageSize: 8 }, { enabled: isAdmin });
+  const assignees = trpc.school.admin.editorialAssignees.useQuery(undefined, { enabled: isAdmin });
+  const media = trpc.school.admin.externalMediaQueue.useQuery({ page: mediaPage, pageSize: 8 }, { enabled: isAdmin });
+  const refresh = (message: string) => {
+    void imports.refetch();
+    void media.refetch();
+    toast.success(message);
+  };
+
+  const submit = trpc.school.admin.submitImportCase.useMutation({ onSuccess: () => { setImportPage(1); setForm(emptyForm); refresh("Карточка передана на проверку."); }, onError: error => toast.error(error.message) });
+  const clear = trpc.school.admin.clearImportCase.useMutation({ onSuccess: () => refresh("Правовое основание зафиксировано."), onError: error => toast.error(error.message) });
+  const reject = trpc.school.admin.rejectImportCase.useMutation({ onSuccess: () => refresh("Импорт отклонён."), onError: error => toast.error(error.message) });
+  const assignEditor = trpc.school.admin.assignImportEditor.useMutation({ onSuccess: () => refresh("Редактор назначен на проверку материала."), onError: error => toast.error(error.message) });
+  const convert = trpc.school.admin.convertImportCase.useMutation({ onSuccess: () => { setConvertId(null); refresh("Создан редакторский черновик."); }, onError: error => toast.error(error.message) });
+  const moderate = trpc.school.admin.moderateExternalMedia.useMutation({ onSuccess: () => refresh("Решение по изображению сохранено."), onError: error => toast.error(error.message) });
   const setField = (key: keyof ImportForm, value: string) => setForm(current => ({ ...current, [key]: value }));
+
   if (loading) return <div className="theme-page grid min-h-screen place-items-center"><Loader2 className="h-7 w-7 animate-spin text-[#ff5b14]" /></div>;
   if (!isAdmin) return <div className="theme-page min-h-screen"><PlatformHeader /><main className="container py-16"><h1 className="text-3xl font-bold">Очереди доступны только редакционному контуру.</h1></main></div>;
-  return <div className="theme-page min-h-screen"><PlatformHeader /><main className="container py-10 sm:py-14"><section className="theme-surface rounded-[28px] border p-6 sm:p-8"><p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Редакционный контур</p><h1 className="mt-3 text-4xl font-bold tracking-[-.055em]">Импорт и внешние изображения</h1><p className="theme-muted mt-3 max-w-3xl text-sm leading-6">Каждый материал ОГЭ фиксирует год и первоисточник до правовой проверки. Очереди загружаются страницами по восемь записей.</p></section><div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"><section className="space-y-6"><section className="theme-surface rounded-2xl border p-5"><div className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Новая карточка импорта</h2></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><select value={form.sourceKind} onChange={event => setField("sourceKind", event.target.value)} className="h-10 rounded-lg px-3"><option value="fipi">ФИПИ / официальный источник</option><option value="partner">Иной проверяемый источник</option></select><select value={form.kimNumber} onChange={event => setField("kimNumber", event.target.value)} className="h-10 rounded-lg px-3"><option value="">Номер КИМ</option>{options.data?.taskTypes.map(item => <option key={item.kimNumber} value={item.kimNumber}>№ {item.kimNumber} · {item.title}</option>)}</select><select value={form.sourceExamYear} onChange={event => setField("sourceExamYear", event.target.value)} className="h-10 rounded-lg px-3"><option value="2026">ОГЭ 2026</option><option value="2025">ОГЭ 2025</option><option value="2024">ОГЭ 2024</option><option value="2023">ОГЭ 2023</option></select><Input value={form.sourceTitle} onChange={event => setField("sourceTitle", event.target.value)} placeholder="Название источника" /><Input value={form.sourceUrl} onChange={event => setField("sourceUrl", event.target.value)} placeholder="https://…" /><Input value={form.sourceRecordId} onChange={event => setField("sourceRecordId", event.target.value)} placeholder="ID записи (необязательно)" /><Input value={form.proposedTitle} onChange={event => setField("proposedTitle", event.target.value)} placeholder="Рабочее название" /></div><Textarea className="mt-3 min-h-20" value={form.sourceSummary} onChange={event => setField("sourceSummary", event.target.value)} placeholder="Краткая справка об источнике" /><Textarea className="mt-3 min-h-20" value={form.plannedAdaptation} onChange={event => setField("plannedAdaptation", event.target.value)} placeholder="План авторской адаптации без копирования формулировки" /><Button className="mt-4 bg-[#ff5b14] text-[#101014] hover:bg-[#ff7a35]" onClick={() => submit.mutate({ ...form, sourceExamYear: Number(form.sourceExamYear), sourceRecordId: form.sourceRecordId || undefined })}>Передать на правовую проверку</Button></section><section className="theme-surface rounded-2xl border p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><Gavel className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Правовая очередь</h2></div><Badge>{imports.data?.total ?? 0}</Badge></div><div className="mt-4 space-y-3">{imports.data?.items.map(item => <article key={item.id} className="rounded-xl border border-white/8 bg-white/[.025] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="flex gap-2"><Badge className="border-0 bg-[#ff5b14]/14 text-[#ff8b4b] hover:bg-[#ff5b14]/14">№ {item.kimNumber}</Badge><Badge variant="outline">ОГЭ {item.sourceExamYear}</Badge><Badge variant="outline">{item.status}</Badge></span><a className="text-xs font-bold text-[#ff8b4b]" href={item.sourceUrl} target="_blank" rel="noreferrer">Источник</a></div><p className="mt-3 font-bold">{item.proposedTitle}</p><p className="theme-muted mt-1 text-xs">{item.sourceTitle} · {item.taskTypeTitle}</p>{item.status === "rights_review" ? <><Textarea className="mt-3 min-h-20" value={notes[item.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Основание решения и комментарий" /><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => clear.mutate({ importCaseId: item.id, note: notes[item.id] ?? "", rightsBasis: notes[item.id] ?? "" })} className="bg-emerald-500/20 text-emerald-200"><CheckCircle2 className="mr-1 h-4 w-4" />Одобрить</Button><Button size="sm" variant="outline" onClick={() => reject.mutate({ importCaseId: item.id, note: notes[item.id] ?? "" })} className="border-rose-400/30 text-rose-200"><XCircle className="mr-1 h-4 w-4" />Отклонить</Button></div></> : null}{item.status === "cleared" ? <Button size="sm" className="mt-3 bg-[#ff5b14] text-[#101014]" onClick={() => { setConvertId(item.id); setDraft(current => ({ ...current, title: item.proposedTitle })); }}>Создать черновик</Button> : null}</article>)}</div><Pager page={imports.data?.page ?? 1} pageCount={imports.data?.pageCount ?? 1} setPage={setImportPage} /></section>{convertId ? <section className="theme-surface rounded-2xl border p-5"><h2 className="text-xl font-bold">Авторский черновик</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><Input value={draft.slug} onChange={event => setDraft(current => ({ ...current, slug: event.target.value }))} placeholder="slug" /><Input value={draft.title} onChange={event => setDraft(current => ({ ...current, title: event.target.value }))} placeholder="Название только для редактора" /><select value={draft.topicSlug} onChange={event => setDraft(current => ({ ...current, topicSlug: event.target.value }))} className="h-10 rounded-lg px-3"><option value="">Тема</option>{options.data?.topics.map(item => <option key={item.slug} value={item.slug}>{item.title}</option>)}</select><select value={draft.answerKind} onChange={event => setDraft(current => ({ ...current, answerKind: event.target.value as typeof draft.answerKind }))} className="h-10 rounded-lg px-3"><option value="short_integer">Краткий целый</option><option value="short_decimal">Краткий десятичный</option><option value="short_text">Краткий текст</option><option value="manual">Ручная проверка</option></select></div><Textarea className="mt-3 min-h-24" value={draft.statementMarkdown} onChange={event => setDraft(current => ({ ...current, statementMarkdown: event.target.value }))} placeholder="Новая авторская формулировка" /><Textarea className="mt-3 min-h-24" value={draft.solutionMarkdown} onChange={event => setDraft(current => ({ ...current, solutionMarkdown: event.target.value }))} placeholder="Авторское решение" />{draft.answerKind !== "manual" ? <Input className="mt-3" value={draft.correctAnswer} onChange={event => setDraft(current => ({ ...current, correctAnswer: event.target.value }))} placeholder="Ответ" /> : null}<div className="mt-4 flex gap-2"><Button onClick={() => convert.mutate({ importCaseId: convertId, ...draft, correctAnswer: draft.correctAnswer || undefined })} className="bg-[#ff5b14] text-[#101014]">Создать черновик</Button><Button variant="ghost" onClick={() => setConvertId(null)}>Отмена</Button></div></section> : null}</section><aside><section className="theme-surface rounded-2xl border p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><FileImage className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Внешние изображения</h2></div><Badge>{media.data?.total ?? 0}</Badge></div><div className="mt-4 space-y-4">{media.data?.items.map(item => <article key={item.id} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><img src={item.assetUrl ?? ""} alt={item.altText} className="h-32 w-full rounded-lg object-cover" /><p className="mt-3 text-sm font-bold">{item.taskTitle}</p><p className="theme-muted text-xs">КИМ № {item.kimNumber}</p><Textarea className="mt-3 min-h-20" value={notes[item.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Мотив решения" /><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => moderate.mutate({ visualId: item.id, decision: "approved", note: notes[item.id] ?? "" })} className="bg-emerald-500/20 text-emerald-200">Утвердить</Button><Button size="sm" variant="outline" onClick={() => moderate.mutate({ visualId: item.id, decision: "rejected", note: notes[item.id] ?? "" })} className="border-rose-400/30 text-rose-200">Отклонить</Button></div></article>)}</div><Pager page={media.data?.page ?? 1} pageCount={media.data?.pageCount ?? 1} setPage={setMediaPage} /></section></aside></div></main></div>;
+
+  return (
+    <div className="theme-page min-h-screen">
+      <PlatformHeader />
+      <main className="container py-10 sm:py-14">
+        <section className="theme-surface rounded-[28px] border p-6 sm:p-8">
+          <p className="text-xs font-extrabold uppercase tracking-[.18em] text-[#ff7a35]">Редакционный контур</p>
+          <h1 className="mt-3 text-4xl font-bold tracking-[-.055em]">Импорт и внешние изображения</h1>
+          <p className="theme-muted mt-3 max-w-3xl text-sm leading-6">Каждый материал ОГЭ фиксирует год и первоисточник до правовой проверки. Карточку можно назначить активному редактору, а очереди загружаются страницами по восемь записей.</p>
+        </section>
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <section className="space-y-6">
+            <section className="theme-surface rounded-2xl border p-5">
+              <div className="flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Новая карточка импорта</h2></div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <select value={form.sourceKind} onChange={event => setField("sourceKind", event.target.value)} className="h-10 rounded-lg px-3"><option value="fipi">ФИПИ / официальный источник</option><option value="partner">Иной проверяемый источник</option></select>
+                <select value={form.kimNumber} onChange={event => setField("kimNumber", event.target.value)} className="h-10 rounded-lg px-3"><option value="">Номер КИМ</option>{options.data?.taskTypes.map(item => <option key={item.kimNumber} value={item.kimNumber}>№ {item.kimNumber} · {item.title}</option>)}</select>
+                <select value={form.sourceExamYear} onChange={event => setField("sourceExamYear", event.target.value)} className="h-10 rounded-lg px-3"><option value="2026">ОГЭ 2026</option><option value="2025">ОГЭ 2025</option><option value="2024">ОГЭ 2024</option><option value="2023">ОГЭ 2023</option></select>
+                <Input value={form.sourceTitle} onChange={event => setField("sourceTitle", event.target.value)} placeholder="Название источника" />
+                <Input value={form.sourceUrl} onChange={event => setField("sourceUrl", event.target.value)} placeholder="https://…" />
+                <Input value={form.sourceRecordId} onChange={event => setField("sourceRecordId", event.target.value)} placeholder="ID записи (необязательно)" />
+                <Input value={form.proposedTitle} onChange={event => setField("proposedTitle", event.target.value)} placeholder="Рабочее название" />
+              </div>
+              <Textarea className="mt-3 min-h-20" value={form.sourceSummary} onChange={event => setField("sourceSummary", event.target.value)} placeholder="Краткая справка об источнике" />
+              <Textarea className="mt-3 min-h-20" value={form.plannedAdaptation} onChange={event => setField("plannedAdaptation", event.target.value)} placeholder="План авторской адаптации без копирования формулировки" />
+              <Button className="mt-4 bg-[#ff5b14] text-[#101014] hover:bg-[#ff7a35]" onClick={() => submit.mutate({ ...form, sourceExamYear: Number(form.sourceExamYear), sourceRecordId: form.sourceRecordId || undefined })}>Передать на правовую проверку</Button>
+            </section>
+
+            <section className="theme-surface rounded-2xl border p-5">
+              <div className="flex items-center justify-between"><div className="flex items-center gap-2"><Gavel className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Правовая очередь</h2></div><Badge>{imports.data?.total ?? 0}</Badge></div>
+              <div className="mt-4 space-y-3">
+                {imports.data?.items.map(item => (
+                  <article key={item.id} className="rounded-xl border border-white/8 bg-white/[.025] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2"><span className="flex gap-2"><Badge className="border-0 bg-[#ff5b14]/14 text-[#ff8b4b] hover:bg-[#ff5b14]/14">№ {item.kimNumber}</Badge><Badge variant="outline">ОГЭ {item.sourceExamYear}</Badge><Badge variant="outline">{item.status}</Badge></span><a className="text-xs font-bold text-[#ff8b4b]" href={item.sourceUrl} target="_blank" rel="noreferrer">Источник</a></div>
+                    <p className="mt-3 font-bold">{item.proposedTitle}</p>
+                    <p className="theme-muted mt-1 text-xs">{item.sourceTitle} · {item.taskTypeTitle}</p>
+                    <ImportAssignmentControl assignedEditorUserId={item.assignedEditorUserId} assignedAt={item.assignedAt} assignees={assignees.data ?? []} isPending={assignEditor.isPending} onAssign={editorUserId => assignEditor.mutate({ importCaseId: item.id, editorUserId })} />
+                    {item.status === "rights_review" ? <><Textarea className="mt-3 min-h-20" value={notes[item.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Основание решения и комментарий" /><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => clear.mutate({ importCaseId: item.id, note: notes[item.id] ?? "", rightsBasis: notes[item.id] ?? "" })} className="bg-emerald-500/20 text-emerald-200"><CheckCircle2 className="mr-1 h-4 w-4" />Одобрить</Button><Button size="sm" variant="outline" onClick={() => reject.mutate({ importCaseId: item.id, note: notes[item.id] ?? "" })} className="border-rose-400/30 text-rose-200"><XCircle className="mr-1 h-4 w-4" />Отклонить</Button></div></> : null}
+                    {item.status === "cleared" ? <Button size="sm" className="mt-3 bg-[#ff5b14] text-[#101014]" onClick={() => { setConvertId(item.id); setDraft(current => ({ ...current, title: item.proposedTitle })); }}>Создать черновик</Button> : null}
+                  </article>
+                ))}
+              </div>
+              <Pager page={imports.data?.page ?? 1} pageCount={imports.data?.pageCount ?? 1} setPage={setImportPage} />
+            </section>
+
+            {convertId ? <section className="theme-surface rounded-2xl border p-5"><h2 className="text-xl font-bold">Авторский черновик</h2><div className="mt-4 grid gap-3 sm:grid-cols-2"><Input value={draft.slug} onChange={event => setDraft(current => ({ ...current, slug: event.target.value }))} placeholder="slug" /><Input value={draft.title} onChange={event => setDraft(current => ({ ...current, title: event.target.value }))} placeholder="Название только для редактора" /><select value={draft.topicSlug} onChange={event => setDraft(current => ({ ...current, topicSlug: event.target.value }))} className="h-10 rounded-lg px-3"><option value="">Тема</option>{options.data?.topics.map(item => <option key={item.slug} value={item.slug}>{item.title}</option>)}</select><select value={draft.answerKind} onChange={event => setDraft(current => ({ ...current, answerKind: event.target.value as typeof draft.answerKind }))} className="h-10 rounded-lg px-3"><option value="short_integer">Краткий целый</option><option value="short_decimal">Краткий десятичный</option><option value="short_text">Краткий текст</option><option value="manual">Ручная проверка</option></select></div><Textarea className="mt-3 min-h-24" value={draft.statementMarkdown} onChange={event => setDraft(current => ({ ...current, statementMarkdown: event.target.value }))} placeholder="Новая авторская формулировка" /><Textarea className="mt-3 min-h-24" value={draft.solutionMarkdown} onChange={event => setDraft(current => ({ ...current, solutionMarkdown: event.target.value }))} placeholder="Авторское решение" />{draft.answerKind !== "manual" ? <Input className="mt-3" value={draft.correctAnswer} onChange={event => setDraft(current => ({ ...current, correctAnswer: event.target.value }))} placeholder="Ответ" /> : null}<div className="mt-4 flex gap-2"><Button onClick={() => convert.mutate({ importCaseId: convertId, ...draft, correctAnswer: draft.correctAnswer || undefined })} className="bg-[#ff5b14] text-[#101014]">Создать черновик</Button><Button variant="ghost" onClick={() => setConvertId(null)}>Отмена</Button></div></section> : null}
+          </section>
+
+          <aside>
+            <section className="theme-surface rounded-2xl border p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><FileImage className="h-5 w-5 text-[#ff7a35]" /><h2 className="text-xl font-bold">Внешние изображения</h2></div><Badge>{media.data?.total ?? 0}</Badge></div><div className="mt-4 space-y-4">{media.data?.items.map(item => <article key={item.id} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><img src={item.assetUrl ?? ""} alt={item.altText} className="h-32 w-full rounded-lg object-cover" /><p className="mt-3 text-sm font-bold">{item.taskTitle}</p><p className="theme-muted text-xs">КИМ № {item.kimNumber}</p><Textarea className="mt-3 min-h-20" value={notes[item.id] ?? ""} onChange={event => setNotes(current => ({ ...current, [item.id]: event.target.value }))} placeholder="Мотив решения" /><div className="mt-2 flex gap-2"><Button size="sm" onClick={() => moderate.mutate({ visualId: item.id, decision: "approved", note: notes[item.id] ?? "" })} className="bg-emerald-500/20 text-emerald-200">Утвердить</Button><Button size="sm" variant="outline" onClick={() => moderate.mutate({ visualId: item.id, decision: "rejected", note: notes[item.id] ?? "" })} className="border-rose-400/30 text-rose-200">Отклонить</Button></div></article>)}</div><Pager page={media.data?.page ?? 1} pageCount={media.data?.pageCount ?? 1} setPage={setMediaPage} /></section>
+          </aside>
+        </div>
+      </main>
+    </div>
+  );
 }

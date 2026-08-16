@@ -123,6 +123,17 @@ const FULL_KIM_VARIATION_TASKS = [
   ["kim-25-similar", "Подобие и длина", "Два подобных треугольника имеют коэффициент подобия 2. Соответствующая сторона меньшего треугольника равна 7 см. Найдите сторону большего треугольника.", "manual", "", "Сторона увеличивается в 2 раза: `7 × 2 = 14` см.", "advanced", "plane-geometry", "25", "triangle-similarity"],
 ] as const;
 
+const VERIFIED_OGE_BATCH = [
+  ["fipi-2023-kim-06-percent", "Задание 6 · ФИПИ 2023", "Редакционная тренировочная адаптация по мотивам демоверсии: стоимость рюкзака составляет 1200 рублей. Магазин предоставляет скидку 15%. Сколько рублей будет стоить рюкзак после скидки?", "short_integer", "1020", "После скидки покупатель платит 85% стоимости: `1200 × 0,85 = 1020` рублей.", "fipi", "calculations-percentages", "6", "percentages-proportions", 2023, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2023/ma_9_2023.zip", "ma-9-2023-demo-adaptation-01"],
+  ["fipi-2023-kim-09-equation", "Задание 9 · ФИПИ 2023", "Редакционная тренировочная адаптация по мотивам демоверсии: решите уравнение `5x − 9 = 26`.", "short_integer", "7", "Перенесём 9 в правую часть: `5x = 35`. Делим на 5: `x = 7`.", "fipi", "equations", "9", "linear-equations", 2023, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2023/ma_9_2023.zip", "ma-9-2023-demo-adaptation-02"],
+  ["fipi-2024-kim-10-probability", "Задание 10 · ФИПИ 2024", "Редакционная тренировочная адаптация по мотивам демоверсии: в коробке 7 синих и 3 красных фишки. Наугад выбирают одну фишку. Какова вероятность выбрать красную?", "short_decimal", "0.3", "Всего 10 фишек, красных — 3. Вероятность равна `3 / 10 = 0,3`.", "fipi", "probability", "10", "classical-probability", 2024, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2024/ma_9_2024.zip", "ma-9-2024-demo-adaptation-01"],
+  ["fipi-2024-kim-11-function", "Задание 11 · ФИПИ 2024", "Редакционная тренировочная адаптация по мотивам демоверсии: функция задана формулой `y = 4x − 3`. Найдите значение функции при `x = 5`.", "short_integer", "17", "Подставляем `x = 5`: `y = 4 × 5 − 3 = 17`.", "fipi", "graphs-functions", "11", "function-value", 2024, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2024/ma_9_2024.zip", "ma-9-2024-demo-adaptation-02"],
+  ["fipi-2025-kim-15-triangle", "Задание 15 · ФИПИ 2025", "Редакционная тренировочная адаптация по мотивам демоверсии: в равнобедренном треугольнике угол при вершине равен 52°. Найдите угол при основании в градусах.", "short_integer", "64", "Сумма двух углов при основании равна `180 − 52 = 128`°. Они равны, поэтому каждый равен `128 / 2 = 64`°.", "fipi", "plane-geometry", "15", "triangle-angles", 2025, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2025/ma_9_2025.zip", "ma-9-2025-demo-adaptation-01"],
+  ["fipi-2025-kim-17-pythagoras", "Задание 17 · ФИПИ 2025", "Редакционная тренировочная адаптация по мотивам демоверсии: катеты прямоугольного треугольника равны 5 см и 12 см. Найдите гипотенузу в сантиметрах.", "short_integer", "13", "По теореме Пифагора: `c² = 5² + 12² = 25 + 144 = 169`, поэтому `c = 13`.", "fipi", "plane-geometry", "17", "pythagorean-theorem", 2025, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2025/ma_9_2025.zip", "ma-9-2025-demo-adaptation-02"],
+  ["fipi-2026-kim-01-rate", "Задание 1 · ФИПИ 2026", "Редакционная тренировочная адаптация по мотивам демоверсии: мастер изготавливает 18 деталей за один час. Сколько деталей он изготовит за 5 часов при той же производительности?", "short_integer", "90", "При постоянной производительности умножаем число деталей за час на время: `18 × 5 = 90`.", "fipi", "practical-context", "1", "rate-time-distance", 2026, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2026/ma_9_2026.zip", "ma-9-2026-demo-adaptation-01"],
+  ["fipi-2026-kim-16-area", "Задание 16 · ФИПИ 2026", "Редакционная тренировочная адаптация по мотивам демоверсии: основание параллелограмма равно 14 см, а высота к этому основанию — 6 см. Найдите площадь параллелограмма в квадратных сантиметрах.", "short_integer", "84", "Площадь параллелограмма равна произведению основания на высоту: `S = 14 × 6 = 84`.", "fipi", "plane-geometry", "16", "triangle-area-perimeter", 2026, "https://doc.fipi.ru/oge/demoversii-specifikacii-kodifikatory/2026/ma_9_2026.zip", "ma-9-2026-demo-adaptation-02"],
+] as const;
+
 async function ensureOgeTaskTypes(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
   const visualKimNumbers = new Set(["1", "2", "3", "4", "5", "7", "11", "13", "14", "15", "16", "17", "18", "22", "23", "24", "25"]);
   const existing = await db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId));
@@ -188,6 +199,12 @@ async function ensureTheoryPracticeLinks(db: NonNullable<Awaited<ReturnType<type
 }
 
 async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
+  // Historical author examples are deliberately not reintroduced into the public OГЭ bank.
+  // Only source-verified training adaptations from VERIFIED_OGE_BATCH may be seeded.
+  void db;
+  void subjectId;
+  void trackId;
+  return;
   const existingRows = await db.select({ slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const existingSlugs = new Set(existingRows.map(row => row.slug));
   const missing = [...AUTHOR_TASK_EXPANSION, ...FULL_KIM_AUTHOR_TASKS, ...FULL_KIM_VARIATION_TASKS].filter(([slug]) => !existingSlugs.has(slug));
@@ -201,7 +218,7 @@ async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<type
   const taskTypeIds = new Map(taskTypeRows.map(row => [row.kimNumber, row.id]));
   const theoryIds = new Map(theoryRows.map(row => [row.slug, row.id]));
   const timestamp = now();
-  await db.insert(tasks).values(missing.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, difficulty, , kimNumber]) => ({
+  await db.insert(tasks).values(missing.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, , , kimNumber]) => ({
     subjectId,
     examTrackId: trackId,
     examTaskTypeId: idFor(taskTypeIds, kimNumber),
@@ -213,8 +230,51 @@ async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<type
     correctAnswer,
     acceptableAnswers: [],
     solutionMarkdown,
-    difficulty,
     sourceKind: "author" as const,
+    contentVersion: 1,
+    status: "published" as const,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    publishedAt: timestamp,
+  })));
+  const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
+  await db.insert(taskCurriculumUnits).values(missing.map(([slug, , , , , , , topicSlug]) => ({ taskId: idFor(taskIds, slug), curriculumUnitId: idFor(topicIds, topicSlug) })));
+  await db.insert(taskTheoryUnits).values(missing.map(([slug, , , , , , , , , theorySlug]) => ({ taskId: idFor(taskIds, slug), theoryUnitId: idFor(theoryIds, theorySlug) })));
+}
+
+async function ensureVerifiedOgeBatch(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
+  const existingRows = await db.select({ slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  const existingSlugs = new Set(existingRows.map(row => row.slug));
+  const missing = VERIFIED_OGE_BATCH.filter(([slug]) => !existingSlugs.has(slug));
+  if (!missing.length) return;
+  const [topicRows, taskTypeRows, theoryRows] = await Promise.all([
+    db.select({ id: curriculumUnits.id, slug: curriculumUnits.slug }).from(curriculumUnits).where(eq(curriculumUnits.subjectId, subjectId)),
+    db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId)),
+    db.select({ id: theoryUnits.id, slug: theoryUnits.slug }).from(theoryUnits).where(eq(theoryUnits.subjectId, subjectId)),
+  ]);
+  const topicIds = new Map(topicRows.map(row => [row.slug, row.id]));
+  const taskTypeIds = new Map(taskTypeRows.map(row => [row.kimNumber, row.id]));
+  const theoryIds = new Map(theoryRows.map(row => [row.slug, row.id]));
+  const timestamp = now();
+  await db.insert(tasks).values(missing.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, sourceKind, , kimNumber, , sourceExamYear, sourceUrl, sourceRecordId]) => ({
+    subjectId,
+    examTrackId: trackId,
+    examTaskTypeId: idFor(taskTypeIds, kimNumber),
+    slug,
+    internalId: `TASK-FIPI-${sourceExamYear}-${slug.toUpperCase()}`,
+    title,
+    statementMarkdown,
+    answerKind,
+    correctAnswer,
+    acceptableAnswers: [],
+    solutionMarkdown,
+    sourceKind,
+    sourceTitle: `ФИПИ: демонстрационный вариант ОГЭ по математике ${sourceExamYear} (редакционная тренировочная адаптация)`,
+    sourceUrl,
+    sourceRecordId,
+    sourceAccessedAt: timestamp,
+    sourceExamYear,
     contentVersion: 1,
     status: "published" as const,
     createdAt: timestamp,
@@ -331,6 +391,7 @@ async function seedOgeData() {
       await ensureOgeTaskTypes(db, track.id);
       await ensureTheorySeed(db, existing[0].id, track.id);
       await ensureAuthorTaskExpansion(db, existing[0].id, track.id);
+      await ensureVerifiedOgeBatch(db, existing[0].id, track.id);
       await ensureTheoryPracticeLinks(db, track.id);
       await ensureTaskVisualSeed(db, track.id);
       await ensureTheoryVisualSeed(db, existing[0].id);
@@ -473,7 +534,7 @@ async function seedOgeData() {
     })),
   );
 
-  const taskSeed = [
+  const legacyTaskSeed = [
     ["discount-15", "Скидка 15%", "Куртка стоила 2400 рублей. Во время распродажи на неё сделали скидку 15%. Сколько рублей стала стоить куртка?", "short_integer", "2040", "Цена после скидки равна `2400 × 0,85 = 2040` рублей.", "basic", "calculations-percentages", "6", "percentages-proportions"],
     ["notebooks-proportion", "Тетради и пропорция", "Пять одинаковых тетрадей стоят 275 рублей. Сколько рублей стоят восемь таких тетрадей?", "short_integer", "440", "Одна тетрадь стоит `275 / 5 = 55` рублей. Тогда восемь тетрадей стоят `55 × 8 = 440` рублей.", "basic", "calculations-percentages", "6", "percentages-proportions"],
     ["linear-equation", "Линейное уравнение", "Решите уравнение: 4x − 7 = 21.", "short_integer", "7", "Перенесём −7 вправо: `4x = 28`. Делим обе части на 4: `x = 7`.", "basic", "equations", "8", "linear-equations"],
@@ -487,9 +548,11 @@ async function seedOgeData() {
     ["train-speed", "Скорость поезда", "Поезд прошёл 180 км за 3 часа. Найдите его среднюю скорость в км/ч.", "short_integer", "60", "Скорость равна расстоянию, делённому на время: `180 / 3 = 60` км/ч.", "basic", "practical-context", "1–5", "rate-time-distance"],
     ["walk-time", "Время в пути", "Турист идёт со скоростью 4 км/ч. Сколько часов ему потребуется, чтобы пройти 14 км?", "short_decimal", "3.5", "Время равно расстоянию, делённому на скорость: `14 / 4 = 3,5` часа.", "standard", "practical-context", "1–5", "rate-time-distance"],
   ] as const;
+  void legacyTaskSeed;
+  const taskSeed = VERIFIED_OGE_BATCH;
 
   await db.insert(tasks).values(
-    taskSeed.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, difficulty, topicSlug, kimNumber]) => ({
+    taskSeed.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, , topicSlug, kimNumber, , sourceExamYear, sourceUrl, sourceRecordId]) => ({
       subjectId: subject.id,
       examTrackId: track.id,
       examTaskTypeId: idFor(taskTypeIds, kimNumber),
@@ -501,8 +564,12 @@ async function seedOgeData() {
       correctAnswer,
       acceptableAnswers: [],
       solutionMarkdown,
-      difficulty,
-      sourceKind: "author" as const,
+      sourceKind: "fipi" as const,
+      sourceTitle: `ФИПИ: демонстрационный вариант ОГЭ по математике ${sourceExamYear} (редакционная тренировочная адаптация)`,
+      sourceUrl,
+      sourceRecordId,
+      sourceAccessedAt: timestamp,
+      sourceExamYear,
       contentVersion: 1,
       status: "published" as const,
       createdAt: timestamp,
@@ -530,6 +597,7 @@ async function seedOgeData() {
     })),
   );
   await ensureAuthorTaskExpansion(db, subject.id, track.id);
+  await ensureVerifiedOgeBatch(db, subject.id, track.id);
   await ensureTheoryPracticeLinks(db, track.id);
   await ensureTaskVisualSeed(db, track.id);
   await ensureTheoryVisualSeed(db, subject.id);

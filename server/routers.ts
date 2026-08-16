@@ -41,6 +41,7 @@ const publicFilters = z.object({
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
   part: z.enum(["part1", "part2"]).optional(),
+  sourceExamYear: z.number().int().min(2023).max(2026).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(6).max(24).default(12),
 });
@@ -168,6 +169,7 @@ export const appRouter = router({
       if (input.topicSlug) filters.push(eq(curriculumUnits.slug, input.topicSlug));
       if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
       if (input.part) filters.push(eq(examTaskTypes.part, input.part));
+      if (input.sourceExamYear) filters.push(eq(tasks.sourceExamYear, input.sourceExamYear));
       const offset = (input.page - 1) * input.pageSize;
       const [totalRow] = await db
         .select({ total: sql<number>`count(distinct ${tasks.id})` })

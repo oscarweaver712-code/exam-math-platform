@@ -5,6 +5,7 @@ import { getDb } from "./db";
 import {
   contentImportCases,
   contentImportEvents,
+  editorialAccessRoles,
   homeworkAssignments,
   homeworkItems,
   learningPromos,
@@ -100,9 +101,12 @@ describe("public bank and tutor homework flow", () => {
     expect(overview.taskTypes.filter(item => item.part === "part1")).toHaveLength(19);
     expect(overview.taskTypes.filter(item => item.part === "part2")).toHaveLength(6);
     const listing = await caller.publicBank.listTasks({ page: 1, pageSize: 12 });
-    expect(listing.items).toHaveLength(2);
-    expect(listing.total).toBe(2);
-    expect(listing.items[0]?.sourceExamYear).toBe(2026);
+    expect(listing.items.length).toBeGreaterThanOrEqual(2);
+    expect(listing.total).toBeGreaterThanOrEqual(2);
+    expect(listing.items.some(item => item.sourceExamYear === 2026)).toBe(true);
+    const only2023 = await caller.publicBank.listTasks({ page: 1, pageSize: 12, sourceExamYear: 2023 });
+    expect(only2023.total).toBeGreaterThanOrEqual(2);
+    expect(only2023.items.every(item => item.sourceExamYear === 2023)).toBe(true);
     const details = await caller.publicBank.getTask({ slug: listing.items[0].slug });
     expect(details.title).toBe(listing.items[0].title);
     expect(details.part).toBe("part1");
@@ -283,6 +287,14 @@ describe("public bank and tutor homework flow", () => {
     await expect(blockedCaller.school.admin.submitImportCase(intakeInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
     const createdCase = await adminCaller.school.admin.submitImportCase(intakeInput);
     temporaryImportCaseIds.push(createdCase.importCaseId);
+    const editorOpenId = `${suffix}-intake-editor`;
+    await db.insert(users).values({ openId: editorOpenId, email: `${suffix}-intake-editor@example.test`, name: "Назначенный редактор", loginMethod: "test", role: "admin", lastSignedIn: new Date() });
+    const [editor] = await db.select({ id: users.id }).from(users).where(eq(users.openId, editorOpenId)).limit(1);
+    if (!editor) throw new Error("Editorial assignee was not created");
+    await db.insert(editorialAccessRoles).values({ userId: editor.id, role: "editor", isActive: true, grantedByUserId: adminId, createdAt: Date.now(), updatedAt: Date.now() });
+    await expect(adminCaller.school.admin.editorialAssignees()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ userId: editor.id, role: "editor" })]));
+    await expect(adminCaller.school.admin.assignImportEditor({ importCaseId: createdCase.importCaseId, editorUserId: editor.id })).resolves.toEqual({ importCaseId: createdCase.importCaseId, editorUserId: editor.id });
+    await expect(adminCaller.school.admin.importCases({ page: 1, pageSize: 12 })).resolves.toEqual(expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ id: createdCase.importCaseId, assignedEditorUserId: editor.id })]) }));
     const convertInput = { importCaseId: createdCase.importCaseId, slug: `legal-adaptation-${suffix}`, title: "Авторская адаптация задачи", statementMarkdown: "Решите редакторскую тренировочную задачу и запишите ответ.", solutionMarkdown: "Проведите вычисления последовательно и проверьте полученный результат.", topicSlug, answerKind: "short_integer" as const, correctAnswer: "7" };
     await expect(adminCaller.school.admin.convertImportCase(convertInput)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await adminCaller.school.admin.clearImportCase({ importCaseId: createdCase.importCaseId, note: "Условия использования проверены; разрешена редакторская адаптация без копирования исходной формулировки.", rightsBasis: "Проверено редактором по зарегистрированному источнику.", rightsEvidenceUrl: "https://fipi.ru/oge/demoversii-specifikacii-kodifikatory" });
@@ -295,7 +307,8 @@ describe("public bank and tutor homework flow", () => {
     await expect(blockedCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await adminCaller.school.admin.moderateExternalMedia({ visualId: uploaded.visualId, decision: "approved", note: "Проверка прав и соответствия редакционной политике завершена положительно." });
     await expect(adminCaller.school.admin.getTask({ taskId: converted.taskId })).resolves.toEqual(expect.objectContaining({ visuals: expect.arrayContaining([expect.objectContaining({ id: uploaded.visualId, reviewStatus: "approved" })]) }));
-    await expect(adminCaller.school.admin.importCaseEvents({ importCaseId: createdCase.importCaseId })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "submitted" }), expect.objectContaining({ eventType: "rights_cleared" }), expect.objectContaining({ eventType: "converted" })]));
+    await expect(adminCaller.school.admin.importCaseEvents({ importCaseId: createdCase.importCaseId })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ eventType: "submitted" }), expect.objectContaining({ eventType: "assigned" }), expect.objectContaining({ eventType: "rights_cleared" }), expect.objectContaining({ eventType: "converted" })]));
+    await db.delete(users).where(eq(users.id, editor.id));
   });
 
   it("keeps source metadata and the archive lifecycle under administrator control", async () => {

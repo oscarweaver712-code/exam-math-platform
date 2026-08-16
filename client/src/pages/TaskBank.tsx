@@ -20,12 +20,13 @@ export default function TaskBank() {
   const [topicSlug, setTopicSlug] = useState<string | undefined>();
   const [part, setPart] = useState<"part1" | "part2" | undefined>();
   const [kimNumber, setKimNumber] = useState<string | undefined>();
+  const [sourceExamYear, setSourceExamYear] = useState<number | undefined>();
   const [page, setPage] = useState(1);
   const overview = trpc.publicBank.overview.useQuery();
-  const taskPage = trpc.publicBank.listTasks.useQuery({ topicSlug, part, kimNumber, page, pageSize: 12 });
+  const taskPage = trpc.publicBank.listTasks.useQuery({ topicSlug, part, kimNumber, sourceExamYear, page, pageSize: 12 });
   const tasks = taskPage.data;
   const choose = (action: () => void) => { action(); setPage(1); };
-  const reset = () => { setTopicSlug(undefined); setPart(undefined); setKimNumber(undefined); setPage(1); };
+  const reset = () => { setTopicSlug(undefined); setPart(undefined); setKimNumber(undefined); setSourceExamYear(undefined); setPage(1); };
 
   return (
     <div className="theme-page min-h-screen">
@@ -43,6 +44,7 @@ export default function TaskBank() {
           <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-extrabold"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[#ff5b14] text-[#101014]"><Filter className="h-4 w-4" /></span>Найти задание</div><Button variant="ghost" size="sm" onClick={reset} className="gap-2 text-[#ff8b4b] hover:bg-[#ff5b14]/10 hover:text-[#ffb187]"><RotateCcw className="h-3.5 w-3.5" />Сбросить</Button></div>
           <div className="mt-5 space-y-4">
             <div><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Номер ОГЭ</p><div className="mt-2 flex flex-wrap gap-2"><FilterPill active={!kimNumber} onClick={() => choose(() => setKimNumber(undefined))}>Все</FilterPill>{overview.data?.taskTypes.map(item => <FilterPill key={item.kimNumber} active={kimNumber === item.kimNumber} onClick={() => choose(() => setKimNumber(kimNumber === item.kimNumber ? undefined : item.kimNumber))}>№ {item.kimNumber}</FilterPill>)}</div></div>
+            <div><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Год ОГЭ</p><div className="mt-2 flex flex-wrap gap-2"><FilterPill active={!sourceExamYear} onClick={() => choose(() => setSourceExamYear(undefined))}>Все годы</FilterPill>{[2026, 2025, 2024, 2023].map(year => <FilterPill key={year} active={sourceExamYear === year} onClick={() => choose(() => setSourceExamYear(sourceExamYear === year ? undefined : year))}>ОГЭ {year}</FilterPill>)}</div></div>
             <div className="grid gap-4 lg:grid-cols-2"><div><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Тема</p><div className="mt-2 flex flex-wrap gap-2"><FilterPill active={!topicSlug} onClick={() => choose(() => setTopicSlug(undefined))}>Все темы</FilterPill>{overview.data?.topics.map(topic => <FilterPill key={topic.slug} active={topicSlug === topic.slug} onClick={() => choose(() => setTopicSlug(topicSlug === topic.slug ? undefined : topic.slug))}>{topic.title}</FilterPill>)}</div></div><div><p className="text-[10px] font-extrabold uppercase tracking-[.15em] text-[#77747b]">Часть</p><div className="mt-2 flex flex-wrap gap-2"><FilterPill active={!part} onClick={() => choose(() => setPart(undefined))}>Все</FilterPill><FilterPill active={part === "part1"} onClick={() => choose(() => setPart(part === "part1" ? undefined : "part1"))}>Часть 1</FilterPill><FilterPill active={part === "part2"} onClick={() => choose(() => setPart(part === "part2" ? undefined : "part2"))}>Часть 2</FilterPill></div></div></div>
           </div>
         </section>
