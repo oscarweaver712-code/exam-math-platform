@@ -20,6 +20,8 @@ from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
 from .parse import parse_group_intro, parse_page
+from .equations import solve_equation
+from .formulas import solve_formula
 from .probability import solve_probability
 from .solver import answer_variants, bounded_candidates, solve_statement
 
@@ -195,7 +197,12 @@ def cmd_solve(args: argparse.Namespace) -> None:
     candidates: list[tuple[dict, list[str]]] = []
     for task in tasks:
         if task["answer_kind"] == "short":
-            answer = solve_statement(task["statement_text"]) or solve_probability(task["statement_text"])
+            answer = (
+                solve_statement(task["statement_text"])
+                or solve_probability(task["statement_text"])
+                or solve_equation(task["statement_text"])
+                or solve_formula(task["statement_text"])
+            )
             if answer is not None:
                 candidates.append((task, answer_variants(answer)))
             continue

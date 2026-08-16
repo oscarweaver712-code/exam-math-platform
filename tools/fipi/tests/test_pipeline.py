@@ -17,6 +17,9 @@ from fipi.classify import AMBIGUOUS, CERTAIN, classify  # noqa: E402
 from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
+from fipi.equations import solve_equation  # noqa: E402
+from fipi.formulas import solve_formula  # noqa: E402
+from fipi.probability import solve_probability  # noqa: E402
 from fipi.solver import format_answer, solve_statement  # noqa: E402
 
 MATH = "<m:math><m:mstyle displaystyle=\"true\"><m:semantics>{}</m:semantics></m:mstyle></m:math>"
@@ -233,6 +236,87 @@ class SolverTests(unittest.TestCase):
     def test_integral_results_lose_the_decimal_tail(self) -> None:
         self.assertEqual(format_answer(20.0000000001), "20")
         self.assertEqual(format_answer(1.8), "1.8")
+
+
+class EquationTests(unittest.TestCase):
+    """Linear and quadratic roots, read off a polynomial fit rather than parsed."""
+
+    def test_picks_the_requested_root(self) -> None:
+        smaller = r"Решите уравнение $x^2-9x+18=0$. Если уравнение имеет более одного корня, в ответ запишите меньший из корней."
+        larger = smaller.replace("меньший", "больший")
+        self.assertEqual(solve_equation(smaller), "3")
+        self.assertEqual(solve_equation(larger), "6")
+
+    def test_linear_equation(self) -> None:
+        self.assertEqual(solve_equation(r"Найдите корень уравнения $10(x-9)=7$."), "9.7")
+
+    def test_root_at_zero_is_not_mistaken_for_no_root(self) -> None:
+        self.assertEqual(
+            solve_equation(r"Решите уравнение $10x^2=80x$. Если уравнение имеет более одного корня, в ответ запишите меньший из корней."),
+            "0",
+        )
+
+    def test_rejects_what_it_cannot_fit(self) -> None:
+        # A cubic passes the sampling but fails the fourth-point check.
+        self.assertIsNone(
+            solve_equation(r"Решите уравнение $x^3-8=0$. Если уравнение имеет более одного корня, в ответ запишите меньший из корней.")
+        )
+
+    def test_rejects_an_irrational_root(self) -> None:
+        self.assertIsNone(solve_equation(r"Найдите корень уравнения $x^2=2$."))
+
+
+class FormulaTests(unittest.TestCase):
+    """«Расчёты по формуле»: letters are matched to the prose, not assumed."""
+
+    POWER = (
+        "Мощность постоянного тока (в ваттах) вычисляется по формуле $P=I^2R$, "
+        "где $I$ — сила тока (в амперах), $R$ — сопротивление (в омах). "
+        "Пользуясь этой формулой, найдите сопротивление $R$, если мощность "
+        "составляет 180 Вт, а сила тока равна 6 А. Ответ дайте в омах."
+    )
+    WELL = (
+        "В фирме «Родник» стоимость (в рублях) колодца из железобетонных колец "
+        "рассчитывается по формуле $C=6000+4100n$, где $n$ — число колец, "
+        "установленных в колодце. Пользуясь этой формулой, рассчитайте стоимость "
+        "колодца из 20 колец. Ответ дайте в рублях."
+    )
+
+    def test_solves_for_a_letter_inside_the_formula(self) -> None:
+        self.assertEqual(solve_formula(self.POWER), "5")
+
+    def test_evaluates_the_left_hand_side(self) -> None:
+        self.assertEqual(solve_formula(self.WELL), "88000")
+
+    def test_the_asked_for_quantity_never_takes_a_value(self) -> None:
+        # «рассчитайте стоимость колодца из 20 колец» names the unknown in the
+        # same breath as the given number; a wide match reads 20 as the cost.
+        self.assertNotEqual(solve_formula(self.WELL), "20")
+
+    def test_ignores_a_statement_without_a_formula(self) -> None:
+        self.assertIsNone(solve_formula("Найдите площадь треугольника со стороной 5."))
+
+
+class ProbabilityTests(unittest.TestCase):
+    def test_templated_shapes(self) -> None:
+        cases = {
+            "У бабушки 20 чашек: 10 с красными цветами, остальные с синими. Найдите вероятность того, что это будет чашка с синими цветами.": "0.5",
+            "На экзамене 20 билетов, Оскар не выучил 7 из них. Найдите вероятность того, что ему попадётся выученный билет.": "0.65",
+            "Вероятность того, что новая шариковая ручка пишет плохо (или не пишет), равна 0,02. Найдите вероятность того, что эта ручка пишет хорошо.": "0.98",
+        }
+        for statement, expected in cases.items():
+            self.assertEqual(solve_probability(statement), expected, statement[:40])
+
+    def test_leftover_splits_evenly_between_two_colours(self) -> None:
+        statement = (
+            "В магазине канцтоваров продаётся 206 ручек: 20 красных, 8 зелёных, "
+            "12 фиолетовых, остальные синие и чёрные, их поровну. Найдите вероятность "
+            "того, что случайно выбранная в этом магазине ручка будет красной или синей."
+        )
+        self.assertEqual(solve_probability(statement), "0.5")
+
+    def test_returns_none_for_an_unknown_shape(self) -> None:
+        self.assertIsNone(solve_probability("Найдите вероятность попадания в мишень трижды подряд."))
 
 
 class SpecificationTests(unittest.TestCase):
