@@ -20,7 +20,8 @@ from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
 from .parse import parse_group_intro, parse_page
-from .solver import answer_variants, solve_statement
+from .probability import solve_probability
+from .solver import answer_variants, bounded_candidates, solve_statement
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -191,13 +192,18 @@ def cmd_solve(args: argparse.Namespace) -> None:
     only for tasks an arithmetic evaluator already answered.
     """
     tasks = _load_tasks()
-    candidates = []
+    candidates: list[tuple[dict, list[str]]] = []
     for task in tasks:
-        if task["answer_kind"] != "short":
+        if task["answer_kind"] == "short":
+            answer = solve_statement(task["statement_text"]) or solve_probability(task["statement_text"])
+            if answer is not None:
+                candidates.append((task, answer_variants(answer)))
             continue
-        answer = solve_statement(task["statement_text"])
-        if answer is not None:
-            candidates.append((task, answer))
+        if not args.choices:
+            continue
+        options = bounded_candidates(task.get("answer_space") or {})
+        if options:
+            candidates.append((task, options))
 
     if args.limit:
         candidates = candidates[: args.limit]
@@ -221,7 +227,7 @@ def cmd_solve(args: argparse.Namespace) -> None:
             if task["guid"] in known:
                 continue
             accepted = None
-            for variant in answer_variants(answer):
+            for variant in answer:
                 verdict = client.check_answer(task["guid"], variant)
                 if verdict is True:
                     accepted = variant
@@ -329,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     solve = sub.add_parser("solve", help="compute answers and confirm them with ФИПИ")
     solve.add_argument("--limit", type=int)
     solve.add_argument("--refresh", action="store_true", help="ignore answers.jsonl and start over")
+    solve.add_argument("--choices", action="store_true", help="also walk tasks whose form offers a finite set of answers")
     solve.set_defaults(func=cmd_solve)
 
     stats = sub.add_parser("stats", help="classification report")

@@ -63,6 +63,14 @@ DISTRACTOR_TABLE_RE = re.compile(
 DISTRACTOR_ROW_RE = re.compile(r"<tr\b[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
 RADIO_VALUE_RE = re.compile(r"name=\"answer\"\s+value=\"(\d+)\"", re.IGNORECASE)
 
+#: Shape of the answer, read from the form the bank renders.
+#: Radio buttons carry their value directly; the checkbox and dropdown forms
+#: are described by the `setAnswer` function the page defines per question.
+CHECKBOX_COUNT_RE = re.compile(r"for\s*\(\s*var\s+i\s*=\s*0\s*;\s*i\s*<\s*(\d+)\s*;", re.IGNORECASE)
+SELECT_SLOT_RE = re.compile(r"name=['\"]?ans(\d+)['\"]?", re.IGNORECASE)
+SELECT_BLOCK_RE = re.compile(r"<select[^>]*name=['\"]?ans\d+['\"]?[^>]*>(.*?)</select>", re.IGNORECASE | re.DOTALL)
+OPTION_VALUE_RE = re.compile(r"<option\s+value=['\"]?([^'\">\s]+)", re.IGNORECASE)
+
 # --- text cleanup ----------------------------------------------------------
 
 TABLE_RE = re.compile(r"<table\b[^>]*>(.*?)</table>", re.IGNORECASE | re.DOTALL)
@@ -105,6 +113,12 @@ class Task:
     #: Shared context of the group, attached during the group pass.
     group_intro: str = ""
     group_images: list[str] = field(default_factory=list)
+    #: How the answer is entered, when the form bounds it to a small set:
+    #: `{"kind": "select_one", "options": ["1","2","3"]}`,
+    #: `{"kind": "select_many", "slots": 3}`,
+    #: `{"kind": "match", "slots": 3, "options": ["1","2","3"]}`.
+    #: Empty for free-form answers, where no finite set exists.
+    answer_space: dict = field(default_factory=dict)
     source_page: int = -1
 
     @property
@@ -287,6 +301,34 @@ def _parse_choices(block: str) -> list[dict]:
     return choices
 
 
+def _parse_answer_space(block: str, answer_kind: str) -> dict:
+    """Describe the answer set when the form makes it finite.
+
+    ФИПИ never sends the key, so the only way to learn it is to propose one.
+    Where the form offers three or four buttons, the whole set of proposals is
+    three or four — the same clicks a learner makes. Where the answer is a free
+    number, no such set exists and this returns nothing.
+    """
+    if answer_kind == "select_one":
+        options = sorted(set(RADIO_VALUE_RE.findall(block)), key=lambda value: int(value))
+        return {"kind": "select_one", "options": options} if options else {}
+
+    if answer_kind == "select_many":
+        count = CHECKBOX_COUNT_RE.search(block)
+        return {"kind": "select_many", "slots": int(count.group(1))} if count else {}
+
+    if answer_kind == "match":
+        slots = {int(index) for index in SELECT_SLOT_RE.findall(block)}
+        first = SELECT_BLOCK_RE.search(block)
+        options = [value for value in OPTION_VALUE_RE.findall(first.group(1))] if first else []
+        options = [value for value in options if value not in {"0"}]
+        if slots and options:
+            return {"kind": "match", "slots": len(slots), "options": options}
+        return {}
+
+    return {}
+
+
 def _collect_images(block: str) -> list[str]:
     """Every question asset in one block, as a project-relative `docs/...` path.
 
@@ -355,6 +397,7 @@ def parse_page(page_html: str, page_index: int = -1) -> list[Task]:
                 choices=_parse_choices(block),
                 images=_collect_images(block),
                 picture_fns=sorted(set(PICTURE_FN_RE.findall(block))),
+                answer_space=_parse_answer_space(block, answer_kind),
                 group_id=group.group(2) if group else None,
                 group_position=int(group.group(1)) if group else None,
                 source_page=page_index,

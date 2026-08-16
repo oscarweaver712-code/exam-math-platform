@@ -14,6 +14,7 @@ Standard library only, like the rest of the tool.
 
 from __future__ import annotations
 
+import itertools
 import math
 import re
 from fractions import Fraction
@@ -193,3 +194,47 @@ def answer_variants(answer: str) -> list[str]:
     if "." in answer:
         variants.append(answer.replace(".", ","))
     return variants
+
+
+#: Never propose more than this many answers for one task. A finite set is fine
+#: to walk; an accidental blow-up is not, and would put real load on one host.
+MAX_CANDIDATES = 30
+
+
+def bounded_candidates(answer_space: dict) -> list[str]:
+    """Every answer the form itself allows, for tasks with a finite choice.
+
+    ФИПИ only ever says whether a proposed answer is right, so a key can be
+    learned only by proposing one. Where the form offers three buttons the
+    complete set of proposals is three — the same clicks a learner makes while
+    solving. Free-form numeric answers have no such set and return nothing.
+    """
+    kind = answer_space.get("kind")
+
+    if kind == "select_one":
+        return list(answer_space.get("options", []))[:MAX_CANDIDATES]
+
+    if kind == "select_many":
+        slots = int(answer_space.get("slots", 0))
+        if not 0 < slots <= 5:
+            return []
+        # The page builds a bitmask: one character per checkbox, `1` if ticked.
+        masks = ["".join(bits) for bits in itertools.product("01", repeat=slots)]
+        return [mask for mask in masks if "1" in mask][:MAX_CANDIDATES]
+
+    if kind == "match":
+        slots = int(answer_space.get("slots", 0))
+        options = list(answer_space.get("options", []))
+        if not 0 < slots <= 4 or not options:
+            return []
+        # Matching tasks pair each item with a distinct option, so the answer is
+        # a permutation. Repeats are only tried when there are few enough.
+        candidates = ["".join(order) for order in itertools.permutations(options, slots)]
+        if len(candidates) < MAX_CANDIDATES:
+            extra = ["".join(combo) for combo in itertools.product(options, repeat=slots)]
+            for candidate in extra:
+                if candidate not in candidates:
+                    candidates.append(candidate)
+        return candidates[:MAX_CANDIDATES]
+
+    return []
