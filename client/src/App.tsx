@@ -9,6 +9,7 @@ import TaskBank from "./pages/TaskBank";
 import TaskDetail from "./pages/TaskDetail";
 import Workspace from "./pages/Workspace";
 import TutorWorkspace from "./pages/TutorWorkspace";
+import TutorCabinetShell from "./pages/TutorCabinetShell";
 import AdminTasks from "./pages/AdminTasks";
 import AdminTaskControl from "./pages/AdminTaskControl";
 import AdminAccess from "./pages/AdminAccess";
@@ -39,7 +40,7 @@ function Router() {
       <Route path={"/workspace"} component={Workspace} />
       <Route path={"/settings"} component={SettingsPage} />
       <Route path={"/practice"}>{() => <Redirect to="/bank" />}</Route>
-      <Route path={"/tutor"} component={TutorWorkspace} />
+      <Route path={"/tutor"} component={TutorCabinetShell} />
       <Route path={"/admin/tasks"} component={AdminTasks} />
       <Route path={"/admin/tasks/control"} component={AdminTaskControl} />
       <Route path={"/admin/access"} component={AdminAccess} />
