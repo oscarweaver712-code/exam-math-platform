@@ -44,9 +44,26 @@ export const MAX_AUTH_AGE_MS = 24 * 60 * 60 * 1000;
 
 export class TelegramAuthError extends Error {}
 
+/**
+ * The exact field set Telegram signs.
+ *
+ * The check string must contain these and nothing else. We attach our own
+ * parameters to the callback URL (`redirectTo`), and Telegram knows nothing
+ * about them — folding one into the check string changes the digest and makes
+ * every genuine login look forged.
+ */
+const SIGNED_FIELDS = new Set([
+  "id",
+  "first_name",
+  "last_name",
+  "username",
+  "photo_url",
+  "auth_date",
+]);
+
 function checkString(payload: Record<string, string>): string {
   return Object.keys(payload)
-    .filter(key => key !== "hash")
+    .filter(key => SIGNED_FIELDS.has(key))
     .sort()
     .map(key => `${key}=${payload[key]}`)
     .join("\n");

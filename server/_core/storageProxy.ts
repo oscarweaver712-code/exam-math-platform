@@ -1,15 +1,25 @@
 /**
- * Serves `/media/<key>` from object storage.
+ * Serves `/media/<key>` from whichever storage backend is configured.
  *
  * Stored rows keep a stable app-relative path, so the bucket, its domain and
- * even the provider can change without a data migration. When the bucket sits
- * behind a public CDN we redirect straight to it; otherwise we mint a
- * short-lived signed URL per request.
+ * even the provider can change without a data migration:
+ *
+ * - S3 behind a public CDN → redirect to the CDN URL.
+ * - S3 without one         → redirect to a short-lived signed URL.
+ * - Local disk             → stream the file from the storage directory.
  */
 
 import type { Express } from "express";
-import { isStorageConfigured, storageGetSignedUrl, storagePublicUrl } from "../storage";
-import { MEDIA_PREFIX } from "../storage";
+import {
+  MEDIA_PREFIX,
+  localPathFor,
+  storageBackend,
+  storageGetSignedUrl,
+  storagePublicUrl,
+} from "../storage";
+
+/** Cache aggressively: keys carry a random suffix, so a URL never changes content. */
+const CACHE_CONTROL = "public, max-age=31536000, immutable";
 
 export function registerStorageProxy(app: Express) {
   app.get(`${MEDIA_PREFIX}/*splat`, async (req, res) => {
@@ -20,26 +30,30 @@ export function registerStorageProxy(app: Express) {
       res.status(400).send("Missing storage key");
       return;
     }
-    // Path traversal guard: keys are opaque and never contain `..`.
-    if (key.includes("..")) {
-      res.status(400).send("Invalid storage key");
-      return;
-    }
-    if (!isStorageConfigured()) {
-      res.status(500).send("Storage is not configured");
+
+    if (storageBackend() === "local") {
+      let absolutePath: string;
+      try {
+        // Throws on any key that would escape the storage root.
+        absolutePath = localPathFor(key);
+      } catch {
+        res.status(400).send("Invalid storage key");
+        return;
+      }
+      res.sendFile(absolutePath, { headers: { "Cache-Control": CACHE_CONTROL } }, error => {
+        if (error && !res.headersSent) res.status(404).send("Not found");
+      });
       return;
     }
 
     const publicUrl = storagePublicUrl(key);
     if (publicUrl) {
-      // Permanent location, but keep the app path canonical for callers.
       res.redirect(302, publicUrl);
       return;
     }
 
     try {
-      const signed = await storageGetSignedUrl(key);
-      res.redirect(302, signed);
+      res.redirect(302, await storageGetSignedUrl(key));
     } catch (error) {
       console.error("[Storage] Failed to sign URL for", key, error);
       res.status(404).send("Not found");

@@ -121,3 +121,4 @@ tools/fipi/cache/
 tools/fipi/out/
 __pycache__/
 *.pyc
+storage/

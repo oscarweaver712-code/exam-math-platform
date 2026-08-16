@@ -16,6 +16,7 @@ import * as db from "../db";
 import { signSession } from "./auth";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
+import { claimOwnershipOnFirstLogin } from "./ownerBootstrap";
 import { TelegramAuthError, verifyTelegramLogin } from "./telegram";
 
 /** Only allow redirects back into this app, never to an attacker's host. */
@@ -42,6 +43,17 @@ export function registerAuthRoutes(app: Express) {
         loginMethod: "telegram",
         lastSignedIn: new Date(),
       });
+
+      // Convenience for the very first login on a fresh deploy; a no-op after
+      // an owner exists. Never fatal — a failed claim must not block sign-in.
+      try {
+        await claimOwnershipOnFirstLogin(identity.openId, identity.username);
+      } catch (claimError) {
+        console.error("[Auth] Ownership claim failed:", claimError);
+      }
+
+      // Makes the numeric id easy to read off the logs and pin in OWNER_OPEN_ID.
+      console.log(`[Auth] Signed in: ${identity.openId} (@${identity.username ?? "—"})`);
 
       const token = await signSession({
         openId: identity.openId,

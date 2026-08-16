@@ -126,6 +126,24 @@ describe("verifyTelegramLogin", () => {
     );
     expect(identity.openId).toBe("tg:987654321");
   });
+
+  it("ignores our own query parameters on the callback URL", () => {
+    // The widget's `data-auth-url` carries `redirectTo`, which Telegram never
+    // saw and therefore never signed. Folding it into the check string would
+    // make every genuine login fail.
+    const identity = verifyTelegramLogin(
+      { ...payload(), redirectTo: "/bank" },
+      BOT_TOKEN,
+    );
+    expect(identity.openId).toBe("tg:987654321");
+  });
+
+  it("still rejects a signature when an unsigned field replaces a signed one", () => {
+    const signed = payload();
+    expect(() =>
+      verifyTelegramLogin({ ...signed, username: "someone_else" }, BOT_TOKEN),
+    ).toThrow(TelegramAuthError);
+  });
 });
 
 describe("toOpenId", () => {

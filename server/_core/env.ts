@@ -6,11 +6,22 @@ export const ENV = {
   /** `users.openId` of the project owner, e.g. `tg:123456789`. */
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
 
+  /**
+   * Telegram username (without `@`) allowed to claim ownership on first login.
+   * Only used while no owner exists yet — see `claimOwnershipOnFirstLogin`.
+   */
+  ownerTelegramUsername: (process.env.OWNER_TELEGRAM_USERNAME ?? "")
+    .replace(/^@/, "")
+    .toLowerCase(),
+
   /** Telegram Login Widget. Both are required for sign-in to work. */
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
   telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
 
-  /** S3-compatible object storage (Cloudflare R2). */
+  /** Local storage directory, used whenever the S3 variables are unset. */
+  storageDir: process.env.STORAGE_DIR ?? "storage",
+
+  /** S3-compatible object storage. Setting all four switches the backend to S3. */
   s3Endpoint: process.env.S3_ENDPOINT ?? "",
   s3Region: process.env.S3_REGION ?? "auto",
   s3Bucket: process.env.S3_BUCKET ?? "",
