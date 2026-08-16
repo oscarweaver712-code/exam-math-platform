@@ -33,6 +33,7 @@ import { storagePut } from "./storage";
 
 const DEFAULT_TASKS_FILE = "tools/fipi/out/tasks.jsonl";
 const DEFAULT_IMAGES_DIR = "tools/fipi/out/images";
+const DEFAULT_ANSWERS_FILE = "tools/fipi/out/answers.jsonl";
 
 const SUBJECT_SLUG = "mathematics";
 const TRACK_SLUG = "oge-mathematics";
@@ -79,6 +80,7 @@ type Args = {
   /** Overridable so the same script runs locally or against a mounted volume. */
   tasksFile: string;
   imagesDir: string;
+  answersFile: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -88,12 +90,14 @@ function parseArgs(argv: string[]): Args {
     status: "published",
     tasksFile: DEFAULT_TASKS_FILE,
     imagesDir: DEFAULT_IMAGES_DIR,
+    answersFile: DEFAULT_ANSWERS_FILE,
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--with-images") args.withImages = true;
     else if (argv[i] === "--limit") args.limit = Number(argv[++i]);
     else if (argv[i] === "--tasks") args.tasksFile = argv[++i];
     else if (argv[i] === "--images") args.imagesDir = argv[++i];
+    else if (argv[i] === "--answers") args.answersFile = argv[++i];
     else if (argv[i] === "--status") {
       const value = argv[++i];
       if (value === "draft" || value === "review" || value === "published") args.status = value;
@@ -282,6 +286,20 @@ async function main() {
   const tasksFile = path.resolve(args.tasksFile);
   const imagesDir = path.resolve(args.imagesDir);
 
+  // Answers confirmed against ФИПИ's own checker. Only these are trusted as
+  // keys; anything unconfirmed stays empty rather than becoming a guess a
+  // learner would be marked wrong against.
+  const answerByGuid = new Map<string, string>();
+  const answersFile = path.resolve(args.answersFile);
+  if (fs.existsSync(answersFile)) {
+    for (const line of fs.readFileSync(answersFile, "utf-8").split("\n")) {
+      if (!line.trim()) continue;
+      const record = JSON.parse(line) as { guid: string; answer: string };
+      answerByGuid.set(record.guid, record.answer);
+    }
+    console.log(`Подтверждённых ответов: ${answerByGuid.size}`);
+  }
+
   if (!fs.existsSync(tasksFile)) {
     console.error(`Не найден ${tasksFile}.\nСначала: cd tools/fipi && python3 run.py crawl && python3 run.py build`);
     process.exit(1);
@@ -347,7 +365,7 @@ async function main() {
         ? task.choices.map(choice => ({ id: choice.value, label: choice.text }))
         : null,
       answerKind: answerKindFor(task),
-      correctAnswer: null,
+      correctAnswer: answerByGuid.get(task.guid) ?? null,
       solutionMarkdown: SOLUTION_PLACEHOLDER,
       sourceKind: "fipi" as const,
       sourceTitle: "Открытый банк заданий ОГЭ, ФИПИ",
@@ -402,6 +420,7 @@ async function main() {
   }
 
   console.log(`\nДобавлено ${inserted}, обновлено ${updated}, пропущено ${skipped}`);
+  if (answerByGuid.size) console.log(`С проверяемым ответом: ${answerByGuid.size}`);
   if (args.withImages) console.log(`Загружено изображений: ${images}`);
   console.log(`Статус импортированных задач: ${args.status}`);
 

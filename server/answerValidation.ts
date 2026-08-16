@@ -22,6 +22,15 @@ export function normaliseAnswer(rawAnswer: string, answerKind: AnswerKind) {
   const compact = rawAnswer.trim().replace(/\s+/g, "");
 
   if (answerKind === "short_text") {
+    // The imported ФИПИ bank has no answer key at import time, so every short
+    // answer is stored as text. Most of them are numbers, and a learner types
+    // «1,8» where the key says «1.8» — comparing those as raw strings would
+    // mark a correct answer wrong. Numeric-looking input is canonicalised;
+    // anything else stays plain text.
+    const asNumber = compact.replace(/,/g, ".");
+    if (/^[+-]?\d+(\.\d+)?$/.test(asNumber)) {
+      return normaliseDecimal(asNumber);
+    }
     return compact.toLocaleLowerCase("ru-RU");
   }
 

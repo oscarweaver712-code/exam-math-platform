@@ -20,11 +20,13 @@ from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
 from .parse import parse_group_intro, parse_page
+from .solver import answer_variants, solve_statement
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
 OUT = ROOT / "out"
 TASKS_PATH = OUT / "tasks.jsonl"
+ANSWERS_PATH = OUT / "answers.jsonl"
 GROUPS_PATH = OUT / "groups.jsonl"
 IMAGES_DIR = OUT / "images"
 
@@ -178,6 +180,75 @@ def cmd_groups(args: argparse.Namespace) -> None:
     print("Теперь повторите `build`, чтобы привязать общий текст к заданиям.")
 
 
+def cmd_solve(args: argparse.Namespace) -> None:
+    """Compute the answers we can, then confirm each one with ФИПИ.
+
+    Only confirmed answers are written. A mis-evaluated expression therefore
+    costs one rejected candidate rather than a wrong key in the bank, which is
+    why the solver is allowed to be approximate at the edges.
+
+    This is solve-then-verify, not search: at most two requests per task, and
+    only for tasks an arithmetic evaluator already answered.
+    """
+    tasks = _load_tasks()
+    candidates = []
+    for task in tasks:
+        if task["answer_kind"] != "short":
+            continue
+        answer = solve_statement(task["statement_text"])
+        if answer is not None:
+            candidates.append((task, answer))
+
+    if args.limit:
+        candidates = candidates[: args.limit]
+    print(f"вычислено кандидатов: {len(candidates)}")
+
+    known: dict[str, str] = {}
+    if ANSWERS_PATH.exists() and not args.refresh:
+        with ANSWERS_PATH.open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    record = json.loads(line)
+                    known[record["guid"]] = record["answer"]
+        print(f"уже подтверждено ранее: {len(known)}")
+
+    settings = _settings(args)
+    client = FipiClient(settings, CACHE)
+    confirmed = rejected = unclear = 0
+
+    with ANSWERS_PATH.open("a" if known else "w", encoding="utf-8") as handle:
+        for index, (task, answer) in enumerate(candidates, start=1):
+            if task["guid"] in known:
+                continue
+            accepted = None
+            for variant in answer_variants(answer):
+                verdict = client.check_answer(task["guid"], variant)
+                if verdict is True:
+                    accepted = variant
+                    break
+                if verdict is None:
+                    unclear += 1
+                    break
+                time.sleep(args.delay)
+
+            if accepted is not None:
+                handle.write(json.dumps({
+                    "guid": task["guid"],
+                    "short_id": task["short_id"],
+                    "answer": accepted,
+                }, ensure_ascii=False) + "\n")
+                handle.flush()
+                confirmed += 1
+            else:
+                rejected += 1
+
+            time.sleep(args.delay)
+            if index % 25 == 0:
+                print(f"  {index}/{len(candidates)} — подтверждено {confirmed}", flush=True)
+
+    print(f"подтверждено {confirmed}, отклонено {rejected}, неясно {unclear} -> {ANSWERS_PATH}")
+
+
 def cmd_stats(args: argparse.Namespace) -> None:
     tasks = _load_tasks()
     by_number: Counter[object] = Counter(task["oge_number"] for task in tasks)
@@ -254,6 +325,11 @@ def build_parser() -> argparse.ArgumentParser:
     groups = sub.add_parser("groups", help="download the shared text of grouped tasks")
     groups.add_argument("--refresh", action="store_true")
     groups.set_defaults(func=cmd_groups)
+
+    solve = sub.add_parser("solve", help="compute answers and confirm them with ФИПИ")
+    solve.add_argument("--limit", type=int)
+    solve.add_argument("--refresh", action="store_true", help="ignore answers.jsonl and start over")
+    solve.set_defaults(func=cmd_solve)
 
     stats = sub.add_parser("stats", help="classification report")
     stats.set_defaults(func=cmd_stats)

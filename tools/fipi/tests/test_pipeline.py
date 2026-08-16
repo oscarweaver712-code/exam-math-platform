@@ -17,6 +17,7 @@ from fipi.classify import AMBIGUOUS, CERTAIN, classify  # noqa: E402
 from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
+from fipi.solver import format_answer, solve_statement  # noqa: E402
 
 MATH = "<m:math><m:mstyle displaystyle=\"true\"><m:semantics>{}</m:semantics></m:mstyle></m:math>"
 
@@ -168,6 +169,41 @@ class TableTests(unittest.TestCase):
 
     def test_table_free_text_is_untouched(self) -> None:
         self.assertEqual(to_text("<p>Решите уравнение.</p>"), "Решите уравнение.")
+
+
+class SolverTests(unittest.TestCase):
+    """Arithmetic that can be evaluated outright, so ФИПИ only has to confirm it."""
+
+    CASES = {
+        r"Найдите значение выражения $\frac{21}{5}\cdot \frac{3}{7}$.": "1.8",
+        r"Найдите значение выражения $\frac{1}{5}-\frac{41}{50}$.": "-0.62",
+        r"Найдите значение выражения $a^8\cdot a^{17}:a^{20}$ при $a=2$.": "32",
+        r"Найдите значение выражения $\frac{\sqrt{51}\cdot \sqrt{12}}{\sqrt{17}}$.": "6",
+        r"Найдите значение выражения ${(\sqrt{11}+3)}^2-6\sqrt{11}$.": "20",
+        r"Найдите значение выражения $\frac{{(4\sqrt{3})}^2}{60}$.": "0.8",
+        r"Найдите значение выражения $\frac{{(a^7)}^2}{a^{12}}$ при $a=5$.": "25",
+        "Найдите значение выражения 6,9+7,4.": "14.3",
+    }
+
+    def test_evaluates_the_supported_forms(self) -> None:
+        for statement, expected in self.CASES.items():
+            self.assertEqual(solve_statement(statement), expected, statement)
+
+    def test_nested_braces_inside_a_fraction(self) -> None:
+        # `[^{}]*` cannot express this, which is why the parser counts braces.
+        self.assertEqual(solve_statement(r"Найдите значение выражения $\frac{{(2+3)}^2}{5}$."), "5")
+
+    def test_returns_none_for_anything_it_cannot_evaluate(self) -> None:
+        for statement in [
+            "В магазине 40% товаров со скидкой. Сколько это в штуках?",
+            "Решите уравнение x^2 = 16.",
+            r"Найдите значение выражения $\lim_{x \to 0} x$.",
+        ]:
+            self.assertIsNone(solve_statement(statement))
+
+    def test_integral_results_lose_the_decimal_tail(self) -> None:
+        self.assertEqual(format_answer(20.0000000001), "20")
+        self.assertEqual(format_answer(1.8), "1.8")
 
 
 class SpecificationTests(unittest.TestCase):
