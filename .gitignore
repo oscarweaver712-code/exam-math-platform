@@ -118,7 +118,14 @@ client/public/__manus__/version.json
 # committing ФИПИ statements and diagrams would make the repository a copy of
 # them. `tools/fipi/README.md` explains how to rebuild it in ten minutes.
 tools/fipi/cache/
-tools/fipi/out/
+tools/fipi/out/*
+# ...кроме подтверждённых ключей. Это не материал ФИПИ, а наша работа:
+# ответы вычислены нами и подтверждены их проверкой. Восстановить их можно
+# только повторив весь прогон, поэтому они живут в репозитории.
+!tools/fipi/out/answers.jsonl
 __pycache__/
 *.pyc
 storage/
+
+# Локальная выгрузка базы. Держите копию вне Railway.
+backup/

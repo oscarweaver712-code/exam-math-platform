@@ -90,11 +90,47 @@ railway run pnpm db:push
 
 ```bash
 cd tools/fipi
-python3 run.py crawl && python3 run.py build && python3 run.py images
+python3 run.py crawl      # 39 запросов, сырые страницы в cache/
+python3 run.py build      # -> out/tasks.jsonl с номерами заданий
+python3 run.py groups     # общий текст и план блока 1–5
+python3 run.py build      # повторно, чтобы привязать общее условие
+python3 run.py images     # схемы
+python3 run.py solve --choices   # ключи ответов, с подтверждением у ФИПИ
 ```
 
-Подробности — в [tools/fipi/README.md](tools/fipi/README.md). Импорт готового
-`out/tasks.jsonl` в базу — следующий шаг, он ещё не написан.
+Затем импорт в базу — он идемпотентен, GUID задания ФИПИ служит ключом:
+
+```bash
+pnpm import:fipi -- --with-images
+```
+
+Сборщик должен работать из сети, откуда виден `oge.fipi.ru`. С Railway он
+недоступен: сервера зарубежные, и соединение отваливается по таймауту.
+Подробности — в [tools/fipi/README.md](tools/fipi/README.md).
+
+## Резервная копия
+
+База живёт в одном экземпляре на Railway, а внутри неё есть то, что нельзя
+пересобрать заново: подтверждённые ключи ответов, каждый из которых стоил
+запроса к ФИПИ, и разборы, написанные редакторами руками. Условия и схемы
+восстанавливаются повторным прогоном сборщика, эти две вещи — нет.
+
+```bash
+railway ssh -- sh -c 'cd /app && node_modules/.bin/tsx server/exportBank.ts --out /data/backup'
+railway volume files --volume school-911-volume download /backup backup --overwrite
+```
+
+Первая команда выгружает базу в JSONL на том, вторая забирает выгрузку к вам.
+Второй шаг обязателен: копия на том же хостинге, что и база, защищает только
+от ошибки в запросе, но не от потери проекта.
+
+Ключи ответов дополнительно лежат в репозитории —
+`tools/fipi/out/answers.jsonl`. Это не материал ФИПИ, а результат наших
+вычислений, подтверждённый их проверкой; вернуть его в базу можно так:
+
+```bash
+pnpm import:fipi -- --answers tools/fipi/out/answers.jsonl
+```
 
 ## Переменные окружения
 
