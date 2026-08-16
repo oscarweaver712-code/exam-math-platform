@@ -214,8 +214,25 @@ def _render_table(inner: str) -> str:
     if not rows:
         return ""
 
+    # ФИПИ wraps pictures and whole statements in layout tables, and those
+    # carry no data — rendering them leaves `| | |---|` sitting in the middle
+    # of the statement. Strip the empty scaffolding before deciding whether
+    # what remains is a table at all.
     width = max(len(row) for row in rows)
     rows = [row + [""] * (width - len(row)) for row in rows]
+    rows = [row for row in rows if any(cell.strip() for cell in row)]
+    if not rows:
+        return ""
+
+    filled = [index for index in range(width) if any(row[index].strip() for row in rows)]
+    rows = [[row[index] for index in filled] for row in rows]
+
+    # One row, or one column, is a caption or a wrapper — not a grid.
+    if len(rows) == 1 or len(rows[0]) == 1:
+        cells = [cell.strip() for row in rows for cell in row if cell.strip()]
+        return "\n\n" + " ".join(cells) + "\n\n" if cells else ""
+
+    width = len(rows[0])
     lines = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * width]
     lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
     return "\n\n" + "\n".join(lines) + "\n\n"

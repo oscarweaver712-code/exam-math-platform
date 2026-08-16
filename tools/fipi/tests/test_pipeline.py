@@ -88,6 +88,17 @@ class MathMLTests(unittest.TestCase):
     def test_variables_stay_in_math_mode(self) -> None:
         self.assertEqual(inline_math(MATH.format("<m:mi>n</m:mi>")), "$n$")
 
+    def test_inequalities_survive_the_tag_stripper(self) -> None:
+        # `<` and `>` come out of MathML as bare characters. Left alone, the
+        # HTML tag stripper that runs afterwards eats `<0$ , $c>` as a tag and
+        # the inequality disappears from the statement.
+        less = MATH.format("<m:mrow><m:mi>a</m:mi><m:mo>&#x003C;</m:mo><m:mn>0</m:mn></m:mrow>")
+        rendered = to_text(f"<p>Знак: {less}, далее</p>")
+        self.assertIn("a", rendered)
+        self.assertIn("0", rendered)
+        self.assertIn("далее", rendered)
+        self.assertNotIn("<", rendered)
+
     def test_malformed_input_degrades_to_text(self) -> None:
         self.assertEqual(mathml_to_latex("<m:math><m:mi>x</m:mi>"), "x")
 
@@ -166,6 +177,24 @@ class TableTests(unittest.TestCase):
         rendered = to_text("<table><tr><td><table><tr><td>x</td></tr></table></td><td>y</td></tr></table>")
         self.assertIn("y", rendered)
         self.assertIn("x", rendered)
+
+    def test_empty_layout_tables_are_dropped(self) -> None:
+        # ФИПИ wraps pictures and whole statements in tables that hold nothing;
+        # rendering them left `| | |---|` in the middle of 1093 statements.
+        self.assertEqual(
+            to_text("<table><tr><td></td><td></td></tr></table><p>Найдите угол.</p>"),
+            "Найдите угол.",
+        )
+
+    def test_single_cell_wrapper_is_unwrapped(self) -> None:
+        self.assertEqual(to_text("<table><tr><td>Найдите угол.</td><td></td></tr></table>"), "Найдите угол.")
+
+    def test_empty_columns_are_stripped_but_the_grid_survives(self) -> None:
+        rendered = to_text(
+            "<table><tr><td>a</td><td></td><td>b</td></tr><tr><td>1</td><td></td><td>2</td></tr></table>"
+        )
+        self.assertIn("| a | b |", rendered)
+        self.assertIn("| 1 | 2 |", rendered)
 
     def test_table_free_text_is_untouched(self) -> None:
         self.assertEqual(to_text("<p>Решите уравнение.</p>"), "Решите уравнение.")

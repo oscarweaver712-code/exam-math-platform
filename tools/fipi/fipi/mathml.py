@@ -37,6 +37,11 @@ _OPERATORS = {
     "∙": r"\cdot ",
     "×": r"\times ",
     "÷": r"\div ",
+    # `<` and `>` must not survive as bare characters: the HTML tag stripper
+    # that runs after this would swallow `<0$ , $c>` as if it were a tag, and
+    # the inequality would vanish from the statement.
+    "<": r"\lt ",
+    ">": r"\gt ",
     "≤": r"\le ",
     "≥": r"\ge ",
     "≠": r"\ne ",
