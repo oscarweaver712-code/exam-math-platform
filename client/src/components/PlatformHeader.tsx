@@ -34,14 +34,14 @@ export function PlatformHeader() {
   const profile = trpc.profile.me.useQuery(undefined, { enabled: isAuthenticated });
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
-  const [menuOpen, setMenuOpen] = useState(false);  const cabinetLinks = [
-    { href: "/workspace", label: "Кабинет", icon: LayoutDashboard },
-    ...(profile.data?.learningRole === "tutor" ? [{ href: "/tutor", label: "Репетитор", icon: GraduationCap }] : []),
+  const [menuOpen, setMenuOpen] = useState(false);  const accountLinks = [
+    { href: "/workspace", label: profile.data?.learningRole === "tutor" ? "Рабочий стол" : "Прогресс", icon: LayoutDashboard },
+    ...(profile.data?.learningRole === "tutor" ? [{ href: "/tutor", label: "Работа с учениками", icon: GraduationCap }] : []),
     { href: "/settings", label: "Настройки", icon: Settings },
   ];
   const navigationGroups = [
     { title: "Основное", items: primaryLinks },
-    { title: "Кабинет", items: cabinetLinks },
+    { title: "Учёба и аккаунт", items: accountLinks },
     ...(user?.role === "admin" ? [{ title: "Управление", items: adminLinks }] : []),
   ];
 

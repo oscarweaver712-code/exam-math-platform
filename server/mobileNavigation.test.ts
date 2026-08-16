@@ -3,14 +3,15 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 describe("site-wide mobile navigation", () => {
-  it("keeps public, cabinet and administrative destinations in the global header drawer", async () => {
+  it("keeps public, direct account and administrative destinations in the global header drawer", async () => {
     const source = await readFile(resolve(process.cwd(), "client/src/components/PlatformHeader.tsx"), "utf8");
 
     expect(source).toContain('title: "Основное"');
     expect(source).toContain('href: "/bank"');
     expect(source).toContain('href: "/variants"');
     expect(source).toContain('href: "/subjects"');
-    expect(source).toContain('title: "Кабинет"');
+    expect(source).toContain('title: "Учёба и аккаунт"');
+    expect(source).not.toContain('title: "Кабинет"');
     expect(source).toContain('href: "/workspace"');
     expect(source).toContain('href: "/settings"');
     expect(source).toContain('title: "Управление"');
