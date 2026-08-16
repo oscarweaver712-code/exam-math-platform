@@ -470,7 +470,7 @@ async function seedOgeData() {
       await ensureTheoryVisualSeed(db, existing[0].id);
       await ensureTaskLearningSupport(db, track.id);
       await ensureCatalogNumbers(db, track.id);
-      await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
+      await tryCreateMonthlyVariant(db, track.id);
       const [schedule] = await db.select({ id: variantGenerationSchedules.id }).from(variantGenerationSchedules).where(eq(variantGenerationSchedules.examTrackId, track.id)).limit(1);
       if (!schedule) await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
     }
@@ -678,10 +678,23 @@ async function seedOgeData() {
   await ensureTheoryVisualSeed(db, subject.id);
   await ensureTaskLearningSupport(db, track.id);
   await ensureCatalogNumbers(db, track.id);
-  await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
+  await tryCreateMonthlyVariant(db, track.id);
   await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
 
   return subject.id;
+}
+
+/**
+ * The monthly variant is an optional extra built from 25 author tasks, one per
+ * КИМ position. The seed runs on every request, so letting a missing position
+ * throw would take the whole catalogue — and therefore the bank — down with it.
+ */
+async function tryCreateMonthlyVariant(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  try {
+    await createPublishedMonthlyVariant(db, trackId, monthKeyFrom());
+  } catch (error) {
+    console.warn("[Seed] Вариант месяца не собран:", error instanceof Error ? error.message : error);
+  }
 }
 
 export function ensureOgeSeedData() {

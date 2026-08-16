@@ -95,12 +95,23 @@ describe("public bank and tutor homework flow", () => {
     temporaryImportCaseIds = [];
   });
 
-  it("returns only a verified published OGE fixture to a visitor without authentication", async () => {
+  it("shows a visitor the shop window but never the task content itself", async () => {
+    // Материал ФИПИ используется во внутреннем режиме: счётчики и темы видны
+    // всем, а условия, разборы и проверка ответов — только после входа.
     const caller = appRouter.createCaller(createContext(null));
     const overview = await caller.publicBank.overview();
-    expect(overview.taskTypes.map(item => item.kimNumber)).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)));
-    expect(overview.taskTypes.filter(item => item.part === "part1")).toHaveLength(19);
-    expect(overview.taskTypes.filter(item => item.part === "part2")).toHaveLength(6);
+
+    const examPositions = overview.taskTypes.filter(item => /^\d+$/.test(item.kimNumber) && item.kimNumber !== "0");
+    expect(examPositions.map(item => item.kimNumber)).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)));
+    expect(examPositions.filter(item => item.part === "part1")).toHaveLength(19);
+    expect(examPositions.filter(item => item.part === "part2")).toHaveLength(6);
+
+    await expect(caller.publicBank.listTasks({ page: 1, pageSize: 12 })).rejects.toThrow();
+    await expect(caller.publicBank.getTask({ slug: "any-slug" })).rejects.toThrow();
+  });
+
+  it("returns only a verified published OGE fixture to a signed-in learner", async () => {
+    const caller = appRouter.createCaller(createContext(testUser(studentId!, `${suffix}-student`, `${suffix}-student@example.com`, "Ученик")));
     const listing = await caller.publicBank.listTasks({ page: 1, pageSize: 12 });
     expect(listing.items.length).toBeGreaterThanOrEqual(2);
     expect(listing.total).toBeGreaterThanOrEqual(2);
@@ -114,17 +125,18 @@ describe("public bank and tutor homework flow", () => {
     expect(details.title).toBe(listing.items[0].title);
     expect(details.part).toBe("part1");
     expect(details.sourceExamYear).toBe(2026);
-    const theory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
+    const anonymous = appRouter.createCaller(createContext(null));
+    const theory = await anonymous.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
     expect(theory).toHaveLength(19);
     expect(theory).toEqual(expect.arrayContaining([
       expect.objectContaining({ slug: "fractions-and-order" }),
       expect.objectContaining({ slug: "unit-conversion" }),
     ]));
     expect(theory).toHaveLength(19);
-    const probabilityTheory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", topicSlug: "probability" });
+    const probabilityTheory = await anonymous.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", topicSlug: "probability" });
     expect(probabilityTheory).toHaveLength(2);
     expect(probabilityTheory.every(item => item.topicTitle === "Вероятность")).toBe(true);
-    const searchResults = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", search: "вероятность" });
+    const searchResults = await anonymous.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", search: "вероятность" });
     expect(searchResults).toEqual(expect.arrayContaining([expect.objectContaining({ slug: "classical-probability" })]));
   });
 

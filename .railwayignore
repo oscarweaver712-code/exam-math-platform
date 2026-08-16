@@ -1,0 +1,7 @@
+# Кэш сырых страниц ФИПИ не нужен на сервере: импорт читает out/.
+tools/fipi/cache/
+research/
+storage/
+node_modules/
+dist/
+.git/

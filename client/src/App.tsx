@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Redirect, Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { RequireAuth } from "./components/RequireAuth";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -29,8 +30,9 @@ function Router() {
     <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/login"} component={Login} />
-      <Route path={"/bank"} component={TaskBank} />
-      <Route path={"/bank/:slug"} component={TaskDetail} />
+      {/* Материал ФИПИ используется во внутреннем режиме: сайт публичный, банк — нет. */}
+      <Route path={"/bank"}>{() => <RequireAuth><TaskBank /></RequireAuth>}</Route>
+      <Route path={"/bank/:slug"}>{() => <RequireAuth><TaskDetail /></RequireAuth>}</Route>
       <Route path={"/subjects"} component={SubjectCatalog} />
       <Route path={"/subjects/:subjectSlug"} component={ExamTracks} />
       <Route path={"/subjects/:subjectSlug/:trackSlug"} component={ExamTrackLanding} />

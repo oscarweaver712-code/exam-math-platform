@@ -114,6 +114,9 @@ export const appRouter = router({
       return { track, taskCount: Number(taskCount?.count ?? 0), taskTypes };
     }),
   }),
+  // Материал ФИПИ используется во внутреннем режиме. `overview` остаётся
+  // публичным: он отдаёт только счётчики и названия тем для витрины,
+  // а сами условия, разборы и проверка ответов требуют входа.
   publicBank: router({
     overview: publicProcedure.query(async () => {
       const track = await getOgeTrack();
@@ -163,7 +166,7 @@ export const appRouter = router({
     generateSessionVariant: publicProcedure.input(z.object({ entropy: z.string().min(8).max(160) })).query(async ({ input }) => {
       const track = await getOgeTrack(); return buildEphemeralVariant(await requireDb(), track.id, input.entropy);
     }),
-    listTasks: publicProcedure.input(publicFilters).query(async ({ input }) => {
+    listTasks: protectedProcedure.input(publicFilters).query(async ({ input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       const filters = [eq(tasks.examTrackId, track.id), eq(tasks.status, "published")];
@@ -223,7 +226,7 @@ export const appRouter = router({
       const total = Number(totalRow?.total ?? 0);
       return { items: catalog.map(task => ({ ...task, catalogNumber: task.catalogNumber!, statementVisuals: immediateVisuals.get(task.id) ?? [], additionalMaterialCount: extraMaterialCount.get(task.id) ?? 0 })), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
     }),
-    getTaskMaterials: publicProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
+    getTaskMaterials: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, track.id), eq(tasks.status, "published"))).limit(1);
@@ -234,7 +237,7 @@ export const appRouter = router({
       ]);
       return { materials, visuals };
     }),
-    getTask: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
+    getTask: protectedProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       const [task] = await db
@@ -280,7 +283,7 @@ export const appRouter = router({
       ]);
       return { ...task, catalogNumber: task.catalogNumber!, relatedTheory, visuals, hints, solutionSteps };
     }),
-    checkAnswer: publicProcedure
+    checkAnswer: protectedProcedure
       .input(z.object({ taskId: z.number().int().positive(), rawAnswer: z.string().min(1).max(1024) }))
       .mutation(async ({ input }) => {
         await ensureOgeSeedData();
