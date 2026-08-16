@@ -31,7 +31,19 @@ TD_TAG_RE = re.compile(r"</?td\b", re.IGNORECASE)
 #: variant wrote it. Matching the paths rather than the call signatures keeps
 #: this working when a rare variant shows up.
 IMAGE_RE = re.compile(r"['\"](docs/[^'\"]+?\.(?:png|jpe?g|gif|svg))['\"]", re.IGNORECASE)
-PICTURE_FN_RE = re.compile(r"(ShowPicture[A-Za-z0-9]*)\s*\(\s*['\"]docs/", re.IGNORECASE)
+PICTURE_FN_RE = re.compile(r"(ShowPicture[A-Za-z0-9]*)\s*\(", re.IGNORECASE)
+
+#: Shared intro blocks pass a bare filename instead of a full path and set the
+#: directory separately, e.g.
+#:   files_location='../../docs/<proj>/docs/<guid>/'
+#:   ShowPicture('xs3docsrc<guid>_1_<ts>.png')
+#: Matching only full `docs/...` paths therefore misses every group plan —
+#: exactly the drawing tasks 1–5 of the exam depend on.
+FILES_LOCATION_RE = re.compile(r"files_location\s*=\s*['\"]([^'\"]*)['\"]", re.IGNORECASE)
+BARE_PICTURE_RE = re.compile(r"ShowPicture[A-Za-z0-9]*\(\s*['\"]([^'\"/]+?\.(?:png|jpe?g|gif|svg))['\"]", re.IGNORECASE)
+
+#: Position of a question inside its group, e.g. `title="Задание 3 в B64540"`.
+GROUP_RE = re.compile(r'class="number-in-group"\s+title="Задание\s+(\d+)\s+в\s+(\w+)\s*"', re.IGNORECASE)
 
 # --- metadata --------------------------------------------------------------
 
@@ -52,6 +64,12 @@ DISTRACTOR_ROW_RE = re.compile(r"<tr\b[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTA
 RADIO_VALUE_RE = re.compile(r"name=\"answer\"\s+value=\"(\d+)\"", re.IGNORECASE)
 
 # --- text cleanup ----------------------------------------------------------
+
+TABLE_RE = re.compile(r"<table\b[^>]*>(.*?)</table>", re.IGNORECASE | re.DOTALL)
+ROW_RE = re.compile(r"<tr\b[^>]*>(.*?)</tr>", re.IGNORECASE | re.DOTALL)
+CELL_RE = re.compile(r"<t[dh]\b([^>]*)>(.*?)</t[dh]>", re.IGNORECASE | re.DOTALL)
+COLSPAN_RE = re.compile(r"colspan\s*=\s*[\"\']?(\d+)", re.IGNORECASE)
+ROWSPAN_RE = re.compile(r"rowspan\s*=\s*[\"\']?(\d+)", re.IGNORECASE)
 
 SCRIPT_RE = re.compile(r"<script\b.*?</script>", re.IGNORECASE | re.DOTALL)
 STYLE_RE = re.compile(r"<style\b.*?</style>", re.IGNORECASE | re.DOTALL)
@@ -79,6 +97,14 @@ class Task:
     choices: list[dict] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
     picture_fns: list[str] = field(default_factory=list)
+    #: Group of questions sharing one text and drawing, e.g. the practical
+    #: block 1–5. `None` for standalone questions.
+    group_id: str | None = None
+    #: 1-based position inside that group.
+    group_position: int | None = None
+    #: Shared context of the group, attached during the group pass.
+    group_intro: str = ""
+    group_images: list[str] = field(default_factory=list)
     source_page: int = -1
 
     @property
@@ -106,9 +132,96 @@ def _find_cell(block: str, start: int) -> tuple[str, int]:
     return block[start:], len(block)
 
 
+def _cell_text(fragment: str) -> str:
+    """Inline text of one table cell: no newlines, so it fits a markdown row."""
+    text = SCRIPT_RE.sub(" ", fragment)
+    text = STYLE_RE.sub(" ", text)
+    text = TAG_RE.sub(" ", text)
+    text = html.unescape(text)
+    return WS_RE.sub(" ", text).replace("|", "\\|").strip()
+
+
+def _render_table(inner: str) -> str:
+    """Render one table as a markdown grid.
+
+    The practical block (ОГЭ 1–5) puts its data in tables — tariffs, tyre
+    sizes, timetables. Flattening those to a run of prose destroys the row and
+    column pairing and makes the task unanswerable, so the grid is preserved.
+
+    Both `colspan` and `rowspan` are expanded into real cells. Rowspan matters
+    as much as the text: a header spanning two rows shifts every cell below it
+    one column to the left if ignored, which silently pairs each value with the
+    wrong heading.
+    """
+    rows: list[list[str]] = []
+    # column index -> (remaining rows, text) carried down from an earlier row
+    pending: dict[int, tuple[int, str]] = {}
+
+    for row_html in ROW_RE.findall(inner):
+        cells: list[str] = []
+        column = 0
+
+        def place(value: str) -> None:
+            nonlocal column
+            while column in pending:
+                remaining, carried = pending[column]
+                cells.append(carried)
+                if remaining <= 1:
+                    del pending[column]
+                else:
+                    pending[column] = (remaining - 1, carried)
+                column += 1
+            cells.append(value)
+            column += 1
+
+        for attrs, cell_html in CELL_RE.findall(row_html):
+            value = _cell_text(cell_html)
+            colspan = int(COLSPAN_RE.search(attrs).group(1)) if COLSPAN_RE.search(attrs) else 1
+            rowspan = int(ROWSPAN_RE.search(attrs).group(1)) if ROWSPAN_RE.search(attrs) else 1
+            for _ in range(colspan):
+                start = column
+                place(value)
+                if rowspan > 1:
+                    pending[start] = (rowspan - 1, value)
+
+        # Trailing carried cells after the last real cell of the row.
+        while column in pending:
+            remaining, carried = pending[column]
+            cells.append(carried)
+            if remaining <= 1:
+                del pending[column]
+            else:
+                pending[column] = (remaining - 1, carried)
+            column += 1
+
+        if cells:
+            rows.append(cells)
+
+    if not rows:
+        return ""
+
+    width = max(len(row) for row in rows)
+    rows = [row + [""] * (width - len(row)) for row in rows]
+    lines = ["| " + " | ".join(rows[0]) + " |", "|" + "---|" * width]
+    lines.extend("| " + " | ".join(row) + " |" for row in rows[1:])
+    return "\n\n" + "\n".join(lines) + "\n\n"
+
+
+def _render_tables(fragment: str) -> str:
+    """Convert tables to markdown innermost-first, so nesting does not break."""
+    previous = None
+    text = fragment
+    # A table may contain another table; repeat until nothing is left to render.
+    while previous != text:
+        previous = text
+        text = TABLE_RE.sub(lambda match: _render_table(match.group(1)), text, count=0)
+    return text
+
+
 def to_text(fragment: str) -> str:
-    """Readable plain text: MathML becomes `$…$`, layout becomes newlines."""
+    """Readable plain text: MathML becomes `$…$`, tables become markdown grids."""
     text = inline_math(fragment)
+    text = _render_tables(text)
     text = SCRIPT_RE.sub(" ", text)
     text = STYLE_RE.sub(" ", text)
     text = CELL_BREAK_RE.sub(" | ", text)
@@ -116,7 +229,11 @@ def to_text(fragment: str) -> str:
     text = TAG_RE.sub("", text)
     text = html.unescape(text)
     text = WS_RE.sub(" ", text)
-    text = "\n".join(line.strip(" |").strip() for line in text.split("\n"))
+    # Markdown table rows must keep their leading and trailing pipes.
+    text = "\n".join(
+        line.strip() if line.lstrip().startswith("|") else line.strip(" |").strip()
+        for line in text.split("\n")
+    )
     text = NEWLINES_RE.sub("\n\n", text)
     return text.strip()
 
@@ -170,6 +287,27 @@ def _parse_choices(block: str) -> list[dict]:
     return choices
 
 
+def _collect_images(block: str) -> list[str]:
+    """Every question asset in one block, as a project-relative `docs/...` path.
+
+    Two shapes exist: a full path passed straight to `ShowPictureQ`, and a bare
+    filename passed to `ShowPicture` with the directory in `files_location`.
+    """
+    paths = set(IMAGE_RE.findall(block))
+
+    bare = BARE_PICTURE_RE.findall(block)
+    if bare:
+        # The last assignment before the call wins, which is how the browser
+        # would see it; blocks only ever set it once.
+        locations = [value for value in FILES_LOCATION_RE.findall(block) if value.strip()]
+        base = locations[-1] if locations else ""
+        base = base.lstrip("./").rstrip("/")
+        for name in bare:
+            paths.add(f"{base}/{name}" if base else name)
+
+    return sorted(path for path in paths if path.lower().startswith("docs/"))
+
+
 def parse_page(page_html: str, page_index: int = -1) -> list[Task]:
     """Extract every task on one questions.php response."""
     starts = [(match.start(), match.group(1)) for match in QBLOCK_RE.finditer(page_html)]
@@ -201,6 +339,7 @@ def parse_page(page_html: str, page_index: int = -1) -> list[Task]:
 
         answer_kind, answer_label, kes_codes, kes_titles = _parse_metadata(block)
         canselect = SHORT_ID_RE.search(block)
+        group = GROUP_RE.search(block)
 
         tasks.append(
             Task(
@@ -214,13 +353,60 @@ def parse_page(page_html: str, page_index: int = -1) -> list[Task]:
                 kes_codes=kes_codes,
                 kes_titles=kes_titles,
                 choices=_parse_choices(block),
-                images=sorted(set(IMAGE_RE.findall(block))),
+                images=_collect_images(block),
                 picture_fns=sorted(set(PICTURE_FN_RE.findall(block))),
+                group_id=group.group(2) if group else None,
+                group_position=int(group.group(1)) if group else None,
                 source_page=page_index,
             )
         )
 
     return tasks
+
+
+#: The shared block of a group carries no id, no guid and no `cell_N`, so the
+#: ordinary question regex skips it entirely.
+INTRO_RE = re.compile(r'<div class="qblock">\s*(?!<div id="hint"[^>]*>\s*Задание)', re.IGNORECASE)
+
+
+@dataclass
+class GroupIntro:
+    """Shared text and drawing behind a group of questions."""
+
+    group_id: str
+    text: str
+    html: str
+    images: list[str] = field(default_factory=list)
+
+
+def parse_group_intro(page_html: str, group_id: str) -> GroupIntro | None:
+    """Extract the shared context from a `zid=` listing.
+
+    The practical block 1–5 of the exam is stored as one text plus a plan, and
+    the questions derived from it. Only the questions come back from a normal
+    listing, which is why they look like they are missing their drawing.
+    """
+    blocks = [m.start() for m in re.finditer(r'<div class="qblock', page_html, re.IGNORECASE)]
+    if not blocks:
+        return None
+
+    end = blocks[1] if len(blocks) > 1 else len(page_html)
+    block = page_html[blocks[0] : end]
+
+    # A group listing always leads with the shared block; if the first block is
+    # a numbered question instead, this listing has no shared context.
+    if GROUP_RE.search(block) or GUID_RE.search(block):
+        return None
+
+    hint_end = block.find("</div>")
+    body = block[hint_end + 6 :] if hint_end != -1 else block
+
+    return GroupIntro(
+        group_id=group_id,
+        text=to_text(body),
+        html=clean_html(body),
+        images=_collect_images(block),
+    )
 
 
 def iter_tasks(pages: Iterator[tuple[str, int]]) -> Iterator[Task]:

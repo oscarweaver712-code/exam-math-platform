@@ -24,6 +24,7 @@ import {
   examTaskTypes,
   examTracks,
   subjects,
+  taskAdditionalMaterials,
   taskVisuals,
   tasks,
 } from "../drizzle/schema";
@@ -56,6 +57,10 @@ type ClassifiedTask = {
   choices: Array<{ value: string; text: string }>;
   images: string[];
   image_urls: string[];
+  group_id: string | null;
+  group_position: number | null;
+  group_intro: string;
+  group_images: string[];
   oge_number: number | null;
   oge_title: string;
   url: string;
@@ -187,13 +192,17 @@ async function uploadImages(
   if (!task.images.length) return 0;
 
   const existing = await db
-    .select({ id: taskVisuals.id })
+    .select({ sourceUrl: taskVisuals.sourceUrl })
     .from(taskVisuals)
     .where(eq(taskVisuals.taskId, taskId));
-  if (existing.length) return 0; // already uploaded on a previous run
+  // Compare per image rather than per task: a later crawl can discover an
+  // asset the first one missed, such as the plan shared by a whole group.
+  const known = new Set(existing.map(row => row.sourceUrl).filter(Boolean));
 
   let uploaded = 0;
   for (const [index, relPath] of Array.from(task.images.entries())) {
+    const remoteUrl = task.image_urls[index] ?? null;
+    if (remoteUrl && known.has(remoteUrl)) continue;
     const localFile = path.join(imagesDir, task.guid, path.basename(relPath));
     if (!fs.existsSync(localFile)) {
       console.warn(`  ! нет файла ${localFile}`);
@@ -216,7 +225,7 @@ async function uploadImages(
       // flags it for an editor rather than inventing a description.
       altText: `Схема к заданию ${task.short_id} из открытого банка ФИПИ. Описание не заполнено.`,
       sourceKind: "external",
-      sourceUrl: task.image_urls[index] ?? null,
+      sourceUrl: remoteUrl,
       reviewStatus: "approved",
       sortOrder: index,
       createdAt: timestamp,
@@ -225,6 +234,46 @@ async function uploadImages(
     uploaded += 1;
   }
   return uploaded;
+}
+
+/**
+ * Store the text a group of questions shares.
+ *
+ * The practical block of the exam is one situation — a plan of a village, a
+ * tariff table — with five questions hanging off it. ФИПИ keeps that text in a
+ * separate record reachable only through the group filter, so without this the
+ * questions arrive stripped of the very thing they ask about.
+ */
+async function upsertGroupIntro(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  taskId: number,
+  task: ClassifiedTask,
+): Promise<void> {
+  if (!task.group_intro.trim()) return;
+
+  const title = "Общее условие";
+  const existing = await db
+    .select({ id: taskAdditionalMaterials.id })
+    .from(taskAdditionalMaterials)
+    .where(and(eq(taskAdditionalMaterials.taskId, taskId), eq(taskAdditionalMaterials.title, title)))
+    .limit(1);
+
+  const timestamp = Date.now();
+  if (existing[0]) {
+    await db
+      .update(taskAdditionalMaterials)
+      .set({ bodyMarkdown: task.group_intro, updatedAt: timestamp })
+      .where(eq(taskAdditionalMaterials.id, existing[0].id));
+    return;
+  }
+  await db.insert(taskAdditionalMaterials).values({
+    taskId,
+    title,
+    bodyMarkdown: task.group_intro,
+    sortOrder: 0,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  });
 }
 
 async function main() {
@@ -341,6 +390,8 @@ async function main() {
       taskId = created.id;
       inserted += 1;
     }
+
+    await upsertGroupIntro(db, taskId, task);
 
     if (args.withImages) {
       images += await uploadImages(db, taskId, task, imagesDir);

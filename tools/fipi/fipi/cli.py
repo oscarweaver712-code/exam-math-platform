@@ -19,12 +19,13 @@ from pathlib import Path
 from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
-from .parse import parse_page
+from .parse import parse_group_intro, parse_page
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
 OUT = ROOT / "out"
 TASKS_PATH = OUT / "tasks.jsonl"
+GROUPS_PATH = OUT / "groups.jsonl"
 IMAGES_DIR = OUT / "images"
 
 
@@ -68,6 +69,16 @@ def cmd_build(args: argparse.Namespace) -> None:
         sys.exit(f"{CACHE} is empty — run `crawl` first")
 
     OUT.mkdir(parents=True, exist_ok=True)
+
+    # Shared group context, when a previous `groups` run collected it.
+    groups: dict[str, dict] = {}
+    if GROUPS_PATH.exists():
+        with GROUPS_PATH.open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    record = json.loads(line)
+                    groups[record["group_id"]] = record
+
     seen: set[str] = set()
     written = 0
     stats: Counter[str] = Counter()
@@ -82,10 +93,18 @@ def cmd_build(args: argparse.Namespace) -> None:
                     task.statement_text, task.answer_kind, task.kes_codes, task.extra_cells
                 )
                 record = task.to_dict()
+                shared = groups.get(task.group_id or "")
+                if shared:
+                    record["group_intro"] = shared["intro_text"]
+                    record["group_images"] = shared["images"]
+                    # The plan belongs to the statement as much as the question
+                    # text does; without it the task cannot be answered.
+                    record["images"] = sorted(set(record["images"]) | set(shared["images"]))
+                    record["image_urls"] = [f"{HOST}/{p}" for p in record["images"]]
                 record["oge_number"] = verdict.number
                 record["oge_title"] = describe(verdict.number)
                 record["classification"] = verdict.to_dict()
-                record["image_urls"] = [f"{HOST}/{p}" for p in task.images]
+                record.setdefault("image_urls", [f"{HOST}/{p}" for p in task.images])
                 handle.write(json.dumps(record, ensure_ascii=False) + "\n")
                 written += 1
                 stats[verdict.confidence] += 1
@@ -122,6 +141,41 @@ def cmd_images(args: argparse.Namespace) -> None:
         if index and index % 250 == 0:
             print(f"  {index}/{len(targets)}", flush=True)
     print(f"downloaded {downloaded}, already present {skipped}, failed {failed} -> {IMAGES_DIR}")
+
+
+def cmd_groups(args: argparse.Namespace) -> None:
+    """Fetch the shared text and drawing behind every grouped question."""
+    tasks = _load_tasks()
+    group_ids = sorted({task["group_id"] for task in tasks if task.get("group_id")})
+    if not group_ids:
+        sys.exit("в tasks.jsonl нет групповых заданий — сначала `build`")
+
+    settings = _settings(args)
+    settings.page_size = 100
+    client = FipiClient(settings, CACHE)
+    OUT.mkdir(parents=True, exist_ok=True)
+
+    written = 0
+    with GROUPS_PATH.open("w", encoding="utf-8") as handle:
+        for index, zid in enumerate(group_ids, start=1):
+            html = client.group(zid, refresh=args.refresh)
+            members = parse_page(html, -1)
+            intro = parse_group_intro(html, zid)
+            if not intro:
+                print(f"  ! {zid}: общий блок не найден", file=sys.stderr)
+                continue
+            handle.write(json.dumps({
+                "group_id": zid,
+                "intro_text": intro.text,
+                "intro_html": intro.html,
+                "images": intro.images,
+                "member_count": sum(1 for task in members if task.group_position is not None),
+            }, ensure_ascii=False) + "\n")
+            written += 1
+            print(f"  {index}/{len(group_ids)} {zid}: {len(intro.images)} схем", flush=True)
+
+    print(f"{written} групп -> {GROUPS_PATH}")
+    print("Теперь повторите `build`, чтобы привязать общий текст к заданиям.")
 
 
 def cmd_stats(args: argparse.Namespace) -> None:
@@ -196,6 +250,10 @@ def build_parser() -> argparse.ArgumentParser:
     images.add_argument("--limit", type=int)
     images.add_argument("--delay", type=float, default=0.2, help="seconds between downloads")
     images.set_defaults(func=cmd_images)
+
+    groups = sub.add_parser("groups", help="download the shared text of grouped tasks")
+    groups.add_argument("--refresh", action="store_true")
+    groups.set_defaults(func=cmd_groups)
 
     stats = sub.add_parser("stats", help="classification report")
     stats.set_defaults(func=cmd_stats)

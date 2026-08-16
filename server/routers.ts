@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -28,6 +28,7 @@ import {
   userTheoryProgress,
 } from "../drizzle/schema";
 import { checkPartOneAnswer } from "./answerValidation";
+import { checkAnswerWithFipi } from "./fipiOracle";
 import { canChooseInitialRole, isPartOneAutoCheckEligible } from "./learningPolicy";
 import { aggregateProgress } from "./progress";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -42,7 +43,17 @@ const publicFilters = z.object({
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
   part: z.enum(["part1", "part2"]).optional(),
+  /**
+   * Year of the exam structure. Kept for the few hand-written adaptations —
+   * the ФИПИ open bank itself carries no year at all, only a codifier code
+   * and an answer type, so this matches almost nothing after the import.
+   */
   sourceExamYear: z.number().int().min(2023).max(2026).optional(),
+  /** Only tasks that come with a diagram. */
+  withVisual: z.boolean().optional(),
+  /** Filter by what this learner has already done. */
+  solved: z.enum(["yes", "no"]).optional(),
+  answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]).optional(),
   page: z.number().int().min(1).default(1),
   pageSize: z.number().int().min(6).max(24).default(12),
 });
@@ -166,7 +177,7 @@ export const appRouter = router({
     generateSessionVariant: publicProcedure.input(z.object({ entropy: z.string().min(8).max(160) })).query(async ({ input }) => {
       const track = await getOgeTrack(); return buildEphemeralVariant(await requireDb(), track.id, input.entropy);
     }),
-    listTasks: protectedProcedure.input(publicFilters).query(async ({ input }) => {
+    listTasks: protectedProcedure.input(publicFilters).query(async ({ ctx, input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       const filters = [eq(tasks.examTrackId, track.id), eq(tasks.status, "published")];
@@ -174,6 +185,28 @@ export const appRouter = router({
       if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
       if (input.part) filters.push(eq(examTaskTypes.part, input.part));
       if (input.sourceExamYear) filters.push(eq(tasks.sourceExamYear, input.sourceExamYear));
+      if (input.answerKind) filters.push(eq(tasks.answerKind, input.answerKind));
+      if (input.withVisual) {
+        filters.push(
+          inArray(
+            tasks.id,
+            db.select({ taskId: taskVisuals.taskId }).from(taskVisuals).where(and(eq(taskVisuals.placement, "statement"), eq(taskVisuals.reviewStatus, "approved"))),
+          ),
+        );
+      }
+      if (input.solved) {
+        const attempted = await db
+          .selectDistinct({ taskId: taskAttempts.taskId })
+          .from(taskAttempts)
+          .where(and(eq(taskAttempts.userId, ctx.user.id), eq(taskAttempts.isCorrect, true)));
+        const solvedIds = attempted.map(row => row.taskId);
+        if (input.solved === "yes") {
+          // Nothing solved yet: an empty IN () matches nothing, which is right.
+          filters.push(solvedIds.length ? inArray(tasks.id, solvedIds) : sql`1 = 0`);
+        } else if (solvedIds.length) {
+          filters.push(notInArray(tasks.id, solvedIds));
+        }
+      }
       const offset = (input.page - 1) * input.pageSize;
       const [totalRow] = await db
         .select({ total: sql<number>`count(distinct ${tasks.id})` })
@@ -223,8 +256,32 @@ export const appRouter = router({
         if (visual.placement === "supplement") extraMaterialCount.set(visual.taskId, (extraMaterialCount.get(visual.taskId) ?? 0) + 1);
       }
       for (const material of additionalRows) extraMaterialCount.set(material.taskId, (extraMaterialCount.get(material.taskId) ?? 0) + 1);
+
+      // Latest verdict per task for this learner, so the listing can show
+      // «ВЕРНО / НЕВЕРНО / НЕ РЕШЕНО» the way the ФИПИ bank does.
+      const attemptRows = ids.length
+        ? await db
+            .select({ taskId: taskAttempts.taskId, checkStatus: taskAttempts.checkStatus, isCorrect: taskAttempts.isCorrect, submittedAt: taskAttempts.submittedAt })
+            .from(taskAttempts)
+            .where(and(eq(taskAttempts.userId, ctx.user.id), inArray(taskAttempts.taskId, ids)))
+            .orderBy(asc(taskAttempts.submittedAt))
+        : [];
+      const attemptByTask = new Map<number, (typeof attemptRows)[number]>();
+      // Ascending order means the last write per task is the newest attempt.
+      for (const attempt of attemptRows) attemptByTask.set(attempt.taskId, attempt);
+
       const total = Number(totalRow?.total ?? 0);
-      return { items: catalog.map(task => ({ ...task, catalogNumber: task.catalogNumber!, statementVisuals: immediateVisuals.get(task.id) ?? [], additionalMaterialCount: extraMaterialCount.get(task.id) ?? 0 })), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
+      return { items: catalog.map(task => {
+        const attempt = attemptByTask.get(task.id);
+        return {
+          ...task,
+          catalogNumber: task.catalogNumber!,
+          statementVisuals: immediateVisuals.get(task.id) ?? [],
+          additionalMaterialCount: extraMaterialCount.get(task.id) ?? 0,
+          attemptStatus: attempt?.checkStatus ?? null,
+          attemptIsCorrect: attempt?.isCorrect ?? null,
+        };
+      }), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
     }),
     getTaskMaterials: protectedProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
       const track = await getOgeTrack();
@@ -293,6 +350,8 @@ export const appRouter = router({
             answerKind: tasks.answerKind,
             correctAnswer: tasks.correctAnswer,
             acceptableAnswers: tasks.acceptableAnswers,
+            sourceKind: tasks.sourceKind,
+            sourceRecordId: tasks.sourceRecordId,
             part: examTaskTypes.part,
           })
           .from(tasks)
@@ -529,6 +588,8 @@ export const appRouter = router({
             answerKind: tasks.answerKind,
             correctAnswer: tasks.correctAnswer,
             acceptableAnswers: tasks.acceptableAnswers,
+            sourceKind: tasks.sourceKind,
+            sourceRecordId: tasks.sourceRecordId,
             part: examTaskTypes.part,
           })
           .from(tasks)
@@ -536,6 +597,39 @@ export const appRouter = router({
           .where(and(eq(tasks.id, input.taskId), eq(tasks.status, "published")))
           .limit(1);
         if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задание не найдено." });
+        if (!task.correctAnswer && task.part === "part1" && task.sourceKind === "fipi" && task.sourceRecordId) {
+          // Imported ФИПИ tasks arrive without an answer key, so the first
+          // checks go to the bank's own endpoint. A confirmed answer is written
+          // back, and every later attempt is decided locally.
+          const verdict = await checkAnswerWithFipi(task.sourceRecordId, input.rawAnswer.trim());
+
+          if (verdict.status === "unavailable") {
+            console.warn(`[Oracle] ФИПИ недоступен для ${task.sourceRecordId}: ${verdict.reason}`);
+            await db.insert(taskAttempts).values({ userId: ctx.user.id, taskId: input.taskId, rawAnswer: input.rawAnswer, checkStatus: "awaiting_review", submittedAt: Date.now() });
+            return { checkStatus: "awaiting_review" as const, isCorrect: null, feedback: "Ответ сохранён. Проверить его прямо сейчас не удалось — вернёмся к нему позже." };
+          }
+
+          const isCorrect = verdict.status === "correct";
+          if (isCorrect) {
+            await db.update(tasks).set({ correctAnswer: input.rawAnswer.trim(), updatedAt: Date.now() }).where(eq(tasks.id, input.taskId));
+          }
+          await db.insert(taskAttempts).values({
+            userId: ctx.user.id,
+            taskId: input.taskId,
+            rawAnswer: input.rawAnswer,
+            normalizedAnswer: input.rawAnswer.trim(),
+            checkStatus: isCorrect ? "correct" : "incorrect",
+            isCorrect,
+            feedback: isCorrect ? "Верно." : "Неверно. Попробуйте ещё раз.",
+            submittedAt: Date.now(),
+          });
+          return {
+            checkStatus: (isCorrect ? "correct" : "incorrect") as "correct" | "incorrect",
+            isCorrect,
+            feedback: isCorrect ? "Верно." : "Неверно. Попробуйте ещё раз.",
+          };
+        }
+
         if (!isPartOneAutoCheckEligible({ part: task.part, answerKind: task.answerKind, correctAnswer: task.correctAnswer }) || !task.correctAnswer) {
           await db.insert(taskAttempts).values({ userId: ctx.user.id, taskId: input.taskId, rawAnswer: input.rawAnswer, checkStatus: "awaiting_review", submittedAt: Date.now() });
           return { checkStatus: "awaiting_review" as const, isCorrect: null, feedback: "Ответ сохранён и ожидает проверки преподавателя." };

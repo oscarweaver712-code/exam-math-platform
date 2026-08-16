@@ -91,7 +91,7 @@ class FipiClient:
         kind = self.settings.answer_kind or "any"
         return self.cache_dir / f"p{page:04d}_{theme}_{kind}_{self.settings.page_size}.html"
 
-    def _payload(self, page: int) -> bytes:
+    def _payload(self, page: int, zid: str = "") -> bytes:
         fields = {
             "search": "1",
             "pagesize": str(self.settings.page_size),
@@ -102,7 +102,7 @@ class FipiClient:
             "qsstruct": "",
             "qpos": "",
             "qid": "",
-            "zid": "",
+            "zid": zid,
             "solved": "",
             "favorite": "",
             "blind": "",
@@ -121,6 +121,25 @@ class FipiClient:
         html = raw.decode(ENCODING, errors="replace")
         path.write_text(html, encoding="utf-8")
         return Page(index=index, html=html, from_cache=False)
+
+    def group(self, zid: str, refresh: bool = False) -> str:
+        """Fetch one question group by its id.
+
+        A group is a shared text and drawing plus the questions derived from
+        it — the practical block 1–5 of the exam. The shared block is only
+        reachable this way: the ordinary listing returns the questions alone,
+        which is why their plan appears to be missing.
+        """
+        path = self.cache_dir / f"group_{zid}.html"
+        if path.exists() and not refresh:
+            return path.read_text(encoding="utf-8")
+
+        self._bootstrap()
+        raw = self._open(QUESTIONS_URL, data=self._payload(0, zid=zid))
+        html = raw.decode(ENCODING, errors="replace")
+        path.write_text(html, encoding="utf-8")
+        time.sleep(self.settings.delay)
+        return html
 
     def total(self) -> int:
         """Total number of questions matching the current filters."""

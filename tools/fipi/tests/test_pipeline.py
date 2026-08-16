@@ -130,6 +130,46 @@ class ParseTests(unittest.TestCase):
         self.assertNotIn("ShowPictureQ", to_text("<script>ShowPictureQ('a')</script><p>текст</p>"))
 
 
+class TableTests(unittest.TestCase):
+    """The practical block keeps its data in tables; the grid is the task."""
+
+    TYRES = (
+        "<table><tr><td rowspan=2>Ширина шины (мм)</td><td colspan=3>Диаметр диска</td></tr>"
+        "<tr><td>16</td><td>17</td><td>18</td></tr>"
+        "<tr><td>215</td><td>215/65</td><td>215/60</td><td>&mdash;</td></tr></table>"
+    )
+
+    def test_renders_a_markdown_grid(self) -> None:
+        rendered = to_text(self.TYRES)
+        self.assertIn("|---|---|---|---|", rendered)
+        self.assertTrue(all(line.startswith("|") for line in rendered.splitlines() if line.strip()))
+
+    def test_rowspan_keeps_columns_aligned(self) -> None:
+        # Without rowspan carry-over the "16 17 18" row shifts one column left
+        # and every size pairs with the wrong disc diameter.
+        rows = [line for line in to_text(self.TYRES).splitlines() if line.startswith("|")]
+        header, _separator, sizes, data = rows
+        self.assertEqual(len(header.split("|")), len(sizes.split("|")))
+        self.assertEqual(sizes.split("|")[2].strip(), "16")
+        self.assertEqual(data.split("|")[2].strip(), "215/65")
+
+    def test_colspan_is_expanded(self) -> None:
+        header = to_text(self.TYRES).splitlines()[0]
+        self.assertEqual(header.count("Диаметр диска"), 3)
+
+    def test_pipes_inside_cells_are_escaped(self) -> None:
+        rendered = to_text("<table><tr><td>a|b</td><td>c</td></tr></table>")
+        self.assertIn(r"a\|b", rendered)
+
+    def test_nested_tables_do_not_break_the_outer_grid(self) -> None:
+        rendered = to_text("<table><tr><td><table><tr><td>x</td></tr></table></td><td>y</td></tr></table>")
+        self.assertIn("y", rendered)
+        self.assertIn("x", rendered)
+
+    def test_table_free_text_is_untouched(self) -> None:
+        self.assertEqual(to_text("<p>Решите уравнение.</p>"), "Решите уравнение.")
+
+
 class SpecificationTests(unittest.TestCase):
     """The inverted specification table, `config.slots_for_kes`.
 
