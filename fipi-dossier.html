@@ -1,0 +1,666 @@
+<title>Вскрытие банка ФИПИ</title>
+<style>
+  :root {
+    --paper:      #F2F3F0;
+    --surface:    #FBFBFA;
+    --surface-2:  #E9ECE8;
+    --ink:        #15181A;
+    --ink-2:      #464C4F;
+    --ink-3:      #6F7679;
+    --rule:       #D2D7D1;
+    --rule-hard:  #B4BBB5;
+    --accent:     #0D5C7C;
+    --accent-2:   #E1EDF3;
+    --signal:     #9B3A22;
+    --signal-2:   #F6E5DF;
+    --good:       #2B6446;
+    --good-2:     #DFEBE3;
+
+    --serif: "PT Serif", Charter, Georgia, "Times New Roman", serif;
+    --sans: "PT Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: "SF Mono", "JetBrains Mono", Menlo, "DejaVu Sans Mono", Consolas, monospace;
+
+    --measure: 68ch;
+    --wide: 1140px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #0F1214;
+      --surface:    #171B1D;
+      --surface-2:  #1E2427;
+      --ink:        #E7EAE8;
+      --ink-2:      #A9B1B3;
+      --ink-3:      #7A8386;
+      --rule:       #2A3134;
+      --rule-hard:  #3C4548;
+      --accent:     #6BBBDA;
+      --accent-2:   #123340;
+      --signal:     #DE8266;
+      --signal-2:   #38221C;
+      --good:       #74B48E;
+      --good-2:     #19301F;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #0F1214;
+    --surface:    #171B1D;
+    --surface-2:  #1E2427;
+    --ink:        #E7EAE8;
+    --ink-2:      #A9B1B3;
+    --ink-3:      #7A8386;
+    --rule:       #2A3134;
+    --rule-hard:  #3C4548;
+    --accent:     #6BBBDA;
+    --accent-2:   #123340;
+    --signal:     #DE8266;
+    --signal-2:   #38221C;
+    --good:       #74B48E;
+    --good-2:     #19301F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 24px 120px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: var(--wide); margin: 0 auto; }
+  .col  { max-width: var(--measure); }
+
+  /* ---------- masthead ---------- */
+
+  header.mast {
+    padding: 72px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 8px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 22px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.4rem, 6vw, 3.9rem);
+    line-height: 1.02;
+    letter-spacing: -0.022em;
+    font-weight: 700;
+    margin: 0 0 20px;
+    text-wrap: balance;
+    max-width: 16ch;
+  }
+  .standfirst {
+    font-size: 1.16rem;
+    color: var(--ink-2);
+    max-width: 60ch;
+    margin: 0;
+  }
+  .mast-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 34px;
+    margin-top: 34px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.05em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+  .mast-meta b { color: var(--ink-2); font-weight: 400; }
+
+  /* ---------- structure ---------- */
+
+  section { padding-top: 68px; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 18px;
+    border-bottom: 1px solid var(--rule-hard);
+    padding-bottom: 12px;
+    margin-bottom: 34px;
+  }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    flex: none;
+    padding-top: 4px;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-size: clamp(1.5rem, 3.2vw, 2.05rem);
+    line-height: 1.12;
+    letter-spacing: -0.014em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    margin: 44px 0 14px;
+    color: var(--ink);
+  }
+  h4 {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    margin: 34px 0 12px;
+  }
+  p { margin: 0 0 18px; max-width: var(--measure); }
+  ul, ol { max-width: var(--measure); padding-left: 22px; margin: 0 0 20px; }
+  li { margin-bottom: 9px; }
+  li::marker { color: var(--ink-3); }
+  strong { font-weight: 700; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.855em;
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0.1em 0.36em;
+    word-break: break-word;
+  }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.62;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 18px 20px;
+    overflow-x: auto;
+    margin: 0 0 24px;
+    color: var(--ink-2);
+  }
+  pre code { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; }
+  pre .c { color: var(--ink-3); font-style: italic; }
+  pre .k { color: var(--accent); font-weight: 700; }
+  pre .s { color: var(--good); }
+
+  /* ---------- tables ---------- */
+
+  .tbl-wrap { overflow-x: auto; margin: 0 0 26px; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-family: var(--sans); font-size: 14px; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--ink-3);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--rule-hard);
+    white-space: nowrap;
+    background: var(--surface-2);
+  }
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    color: var(--ink-2);
+    line-height: 1.5;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+  td.strong { color: var(--ink); font-weight: 700; }
+
+  /* ---------- pills ---------- */
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .pill.ok   { background: var(--good-2);   color: var(--good);   border-color: var(--good); }
+  .pill.bad  { background: var(--signal-2); color: var(--signal); border-color: var(--signal); }
+  .pill.info { background: var(--accent-2); color: var(--accent); border-color: var(--accent); }
+
+  /* ---------- stat strip ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 0 0 34px;
+  }
+  .stat { background: var(--surface); padding: 18px 20px; }
+  .stat .v {
+    font-family: var(--mono);
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .stat .v.accent { color: var(--accent); }
+  .stat .l {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    color: var(--ink-3);
+    line-height: 1.35;
+    display: block;
+  }
+
+  /* ---------- callout ---------- */
+
+  .note {
+    border: 1px solid var(--rule-hard);
+    border-left: 3px solid var(--signal);
+    background: var(--surface);
+    padding: 20px 22px;
+    margin: 0 0 26px;
+    max-width: var(--measure);
+  }
+  .note.ok { border-left-color: var(--good); }
+  .note.info { border-left-color: var(--accent); }
+  .note > :last-child { margin-bottom: 0; }
+  .note .lbl {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    display: block;
+    margin-bottom: 9px;
+  }
+
+  /* ---------- pipeline ---------- */
+
+  .pipe {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 0 0 30px;
+  }
+  .step { background: var(--surface); padding: 18px 18px 20px; }
+  .step .n {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+  .step .t {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 14.5px;
+    color: var(--ink);
+    display: block;
+    margin-bottom: 7px;
+    line-height: 1.3;
+  }
+  .step .d {
+    font-family: var(--sans);
+    font-size: 12.5px;
+    color: var(--ink-3);
+    line-height: 1.45;
+    display: block;
+  }
+
+  /* ---------- verdict rows ---------- */
+
+  .verdicts { border: 1px solid var(--rule); background: var(--surface); margin: 0 0 28px; }
+  .vrow {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 20px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule);
+    align-items: start;
+  }
+  .vrow:last-child { border-bottom: 0; }
+  .vrow .vk { padding-top: 2px; }
+  .vrow .vv { font-family: var(--sans); font-size: 14px; color: var(--ink-2); line-height: 1.52; }
+  .vrow .vv b { color: var(--ink); }
+
+  hr.rule { border: 0; border-top: 1px solid var(--rule); margin: 44px 0; }
+
+  footer.end {
+    margin-top: 84px;
+    padding-top: 26px;
+    border-top: 2px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  @media (max-width: 640px) {
+    body { font-size: 16px; padding: 0 18px 80px; }
+    header.mast { padding-top: 48px; }
+    .vrow { grid-template-columns: 1fr; gap: 10px; }
+    .sec-head { gap: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="kicker">Школа 911 · разбор перед сборкой банка</p>
+  <h1>Вскрытие банка ФИПИ</h1>
+  <p class="standfirst">Что на самом деле лежит в репозитории <code>exam-math-platform</code>, как технически устроен открытый банк ОГЭ, и почему сортировки по номерам заданий нет ни у ФИПИ, ни в вашей базе — но её можно восстановить.</p>
+  <div class="mast-meta">
+    <span>16 августа 2026</span>
+    <span>Репозиторий <b>oscarweaver712-code/exam-math-platform</b></span>
+    <span>Протокол ФИПИ проверен <b>вживую</b></span>
+  </div>
+</header>
+
+<!-- ============ 1 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>Что сейчас за проект</h2>
+  </div>
+
+  <p>Это <strong>React 19 + tRPC + Drizzle/MySQL</strong> монорепо, целиком сгенерированное Manus — все 36 коммитов начинаются со слова «Checkpoint». Инженерно оно живое: типы сходятся, 24 теста проходят, production-сборка собирается, зависимости пропатчены после security-аудита. Проблема не в качестве кода, а в том, что <strong>масштаб каркаса на два порядка больше содержимого</strong>.</p>
+
+  <div class="stats">
+    <div class="stat"><span class="v">36</span><span class="l">таблиц в схеме БД</span></div>
+    <div class="stat"><span class="v">~75</span><span class="l">процедур tRPC</span></div>
+    <div class="stat"><span class="v accent">~30</span><span class="l">задач реально в банке</span></div>
+    <div class="stat"><span class="v accent">3884</span><span class="l">задачи ждут в ФИПИ</span></div>
+  </div>
+
+  <h3>Главный конфликт: проект построен против вашей задачи</h3>
+
+  <p>Вся редакционная архитектура — это машина, которая <em>не даёт</em> положить в банк материал ФИПИ. Она была спроектирована намеренно: в репозитории лежат <code>content-rights-policy.md</code>, <code>content_intake_policy.md</code> и <code>fipi_ingestion_research.md</code>, и последний прямо формулирует вывод — «первый этап — <strong>не массовый парсер</strong>».</p>
+
+  <p>Отсюда таблицы <code>content_import_cases</code> и <code>content_import_events</code> со статусами <code>rights_review → cleared → converted</code>, обязательное назначение редактора, вторая пара глаз, отдельная модерация каждой картинки в <code>task_visuals.reviewStatus</code> и правило «перерисовать или сослаться». Ровно поэтому 74 задачи в какой-то момент были заархивированы как неподтверждённые.</p>
+
+  <div class="note">
+    <span class="lbl">Развилка, которую надо пройти осознанно</span>
+    <p>Вы хотите наполнить банк из ФИПИ. Ваш репозиторий спроектирован так, чтобы это блокировать. Одно из двух должно уступить — и это продуктовое решение, а не техническое. Варианты в разделе 04.</p>
+  </div>
+
+  <h3>Мёртвый и полумёртвый код</h3>
+
+  <p>Это и есть та «куча лишних функций». Проверено ссылками по всему дереву:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr><th>Что</th><th class="num">Строк</th><th>Состояние</th><th>Вердикт</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="strong">ComponentShowcase.tsx</td><td class="num">1437</td><td>Ни одной ссылки, нет даже в роутере</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">server/_core/llm.ts</td><td class="num">454</td><td>Boilerplate Manus, не вызывается</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">AIChatBox.tsx</td><td class="num">335</td><td>Только внутри ComponentShowcase</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">voiceTranscription.ts</td><td class="num">284</td><td>Boilerplate, не вызывается</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">_core/map.ts + Map.tsx</td><td class="num">474</td><td>Google Maps в банке задач по математике</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">heartbeat / imageGeneration</td><td class="num">373</td><td>Boilerplate, не вызывается</td><td><span class="pill bad">удалить</span></td></tr>
+        <tr><td class="strong">Подсистема «Теория»</td><td class="num">~7 таблиц</td><td>Версионирование, снапшоты, откат, diff — а роут <code>/theory</code> редиректит на <code>/bank</code></td><td><span class="pill info">заморозить</span></td></tr>
+        <tr><td class="strong">Репетиторский контур</td><td class="num">5 таблиц</td><td>Профили, связки, домашки — при пустом банке некому и нечего задавать</td><td><span class="pill info">заморозить</span></td></tr>
+        <tr><td class="strong">Варианты + планировщик</td><td class="num">3 таблицы</td><td>Ежемесячная генерация вариантов из 30 задач</td><td><span class="pill info">заморозить</span></td></tr>
+        <tr><td class="strong">learningPromos</td><td class="num">1 таблица</td><td>Промо-баннеры с расписанием, компонент не подключён</td><td><span class="pill bad">удалить</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Итого около <strong>3400 строк мёртвого кода</strong> и 15+ таблиц под функции, которым нечего обслуживать. Ничего из этого не мешает работать — но каждое из них удлиняет любое изменение схемы задач.</p>
+
+  <h3>Отдельно: справочник номеров КИМ в проекте неверен</h3>
+
+  <p>Это важнее мёртвого кода, потому что это ровно та ось, по которой вы хотите сортировать. В <code>server/ogeSeed.ts:76</code> лежит <code>FULL_OGE_KIM_TYPES</code> — он расходится со спецификацией ОГЭ 2026, которая, между прочим, уже лежит рядом в <code>research/fipi-2026/spec.txt</code>:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th class="num">№</th><th>В проекте сейчас</th><th>По спецификации 2026</th></tr></thead>
+      <tbody>
+        <tr><td class="num">12</td><td>Последовательности</td><td>Расчёты по формулам <span class="pill bad">сдвиг</span></td></tr>
+        <tr><td class="num">13</td><td>Геометрия: углы и фигуры</td><td>Уравнения и неравенства, координатная прямая <span class="pill bad">сдвиг</span></td></tr>
+        <tr><td class="num">14</td><td>Геометрия: окружность и четырёхугольники</td><td>Последовательности и прогрессии <span class="pill bad">сдвиг</span></td></tr>
+        <tr><td class="num">18</td><td>Геометрия: утверждения</td><td>Геометрия: длины, площади, теоремы</td></tr>
+        <tr><td class="num">19</td><td>Статистика</td><td>Истинные и ложные высказывания</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Номера 1–11 и 15–17 в проекте названы верно. Ломается блок 12–14: там уехал целый геометрический сдвиг, из-за которого настоящие «расчёты по формулам», «неравенства» и «прогрессии» попадают в геометрические полки. Пока справочник кривой, любая сортировка по номерам будет раскладывать задачи не туда. Чинится за час — таблица целиком выводится из <code>spec.txt</code>.</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>Как устроен ФИПИ на самом деле</h2>
+  </div>
+
+  <p>Я прошёл его руками и проверил каждый шаг. Ниже — рабочий протокол, а не догадки.</p>
+
+  <h4>Точка входа</h4>
+
+  <pre><code><span class="c"># проект «Математика ОГЭ» — постоянный GUID</span>
+proj = <span class="s">DE0E276E497AB3784C3FC4CC20248DC0</span>
+
+<span class="k">POST</span> https://oge.fipi.ru/bank/questions.php
+  search=1
+  proj=$proj
+  pagesize=100        <span class="c"># работает, хотя UI предлагает 10</span>
+  page=0              <span class="c"># 0-based</span>
+  theme=              <span class="c"># КЭС: 1..8 или 7.3 и т.п.</span>
+  qkind=              <span class="c"># тип ответа</span>
+  qid=  zid=          <span class="c"># номер задания / номер группы</span>
+
+<span class="c"># Referer обязателен, кука PHPSESSID подхватывается с index.php</span>
+<span class="c"># Ответ: HTML в кодировке windows-1251 — не UTF-8</span></code></pre>
+
+  <div class="verdicts">
+    <div class="vrow"><div class="vk"><span class="pill ok">проверено</span></div><div class="vv"><b>3884 задачи</b> в банке ОГЭ по математике. Счётчик отдаётся прямо в ответе как <code>setQCount(3884)</code>.</div></div>
+    <div class="vrow"><div class="vk"><span class="pill ok">проверено</span></div><div class="vv"><b>pagesize=100 отдаёт 100 блоков.</b> Значит весь банк — это <b>39 запросов</b>, а не 389. Полный обход занимает минуты.</div></div>
+    <div class="vrow"><div class="vk"><span class="pill ok">проверено</span></div><div class="vv">Ни авторизации, ни капчи, ни токена. Только сессионная кука и <code>Referer</code>.</div></div>
+  </div>
+
+  <h3>Анатомия одного задания</h3>
+
+  <p>Каждая задача — это <code>&lt;div class="qblock" id='q45B944'&gt;</code>, и из него достаётся вот что:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Поле</th><th>Откуда</th><th>Пример</th></tr></thead>
+      <tbody>
+        <tr><td class="strong">GUID</td><td><code>&lt;input name="guid"&gt;</code></td><td class="num">00048BBEB81FA06F4CD9D713B8A500DE</td></tr>
+        <tr><td class="strong">Номер ФИПИ</td><td><code>.id-text .canselect</code></td><td class="num">45B944</td></tr>
+        <tr><td class="strong">Условие</td><td><code>td.cell_0</code></td><td>HTML + MathML</td></tr>
+        <tr><td class="strong">Варианты</td><td><code>table.distractors-table</code></td><td>только для заданий с выбором</td></tr>
+        <tr><td class="strong">КЭС</td><td><code>.task-info-content</code></td><td>«7.3 Многоугольники»</td></tr>
+        <tr><td class="strong">Тип ответа</td><td><code>.task-info-content</code></td><td>«Краткий ответ»</td></tr>
+        <tr><td class="strong">Номер задания ОГЭ</td><td colspan="2"><span class="pill bad">отсутствует</span> &nbsp;В метаданных его нет вообще</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note info">
+    <span class="lbl">Ловушка № 1 — картинки не лежат в HTML</span>
+    <p>Обычный парсер найдёт ноль изображений и решит, что их нет. На самом деле картинки рисуются джаваскриптом через <code>document.write</code>, и в разметке лежат вызовы вида <code>ShowPictureQ('docs/…png', 'подпись')</code>. Забирать надо <strong>аргументы этих вызовов</strong>, а не теги <code>&lt;img&gt;</code>.</p>
+  </div>
+
+  <p>Зато URL картинки полностью детерминирован и качается напрямую — я проверил, отдаёт <code>200 image/png</code>:</p>
+
+  <pre><code>https://oge.fipi.ru/docs/{proj}/questions/{guid}/xs3qstsrc{guid}_{n}_{ts}.png
+
+<span class="c"># варианты вызовов, которые надо ловить регуляркой:</span>
+ShowPictureQ(s, hint)              <span class="c"># одиночная — самая частая</span>
+ShowPictureQ2WH(s, s2, hint, w, h) <span class="c"># превью + полная</span>
+ShowPictureQ3(s, s2, s3, hint)
+ShowPictureQGX2(img, xml)          <span class="c"># легаси-графики, редкие</span></code></pre>
+
+  <div class="note info">
+    <span class="lbl">Ловушка № 2 — формулы приходят как MathML</span>
+    <p>Не картинки и не LaTeX, а <code>&lt;m:math&gt;</code> с неймспейс-префиксом <code>m:</code> — страница рендерит их MathJax 4. Их надо конвертировать в LaTeX на входе, иначе в базе окажется мусор из тегов. Хорошая новость: MathML разбирается детерминированно, без OCR и без модели.</p>
+  </div>
+
+  <h3>Ответов ФИПИ не отдаёт — но есть оракул</h3>
+
+  <p>В HTML правильного ответа нет ни в каком виде. Зато есть <code>solve.php</code>, который проверяет присланный ответ. Я проверил на задаче про колодец (<code>C = 6500 + 4000·11</code>):</p>
+
+  <pre><code><span class="k">POST</span> https://oge.fipi.ru/bank/solve.php   <span class="c"># multipart/form-data</span>
+  guid=02F5026F38D4B51C4CFFD8887FD9D1C8
+  answer=50500  ajax=1  proj=$proj
+
+<span class="c"># ответы сервера:</span>
+answer=50500 → <span class="s">"3"</span>   <span class="c"># верно</span>
+answer=50000 → <span class="s">"2"</span>   <span class="c"># неверно</span>
+answer=44000 → <span class="s">"2"</span>   <span class="c"># неверно</span></code></pre>
+
+  <p>Это даёт <strong>верификацию, а не добычу</strong>: решаете задачу сами (или моделью), отправляете один запрос, получаете подтверждение. Один запрос на задачу — нормальная нагрузка. Перебирать ответы этим эндпоинтом не нужно и не стоит: на длинных и дробных ответах это всё равно не работает, а по нагрузке выглядит как атака.</p>
+</section>
+
+<!-- ============ 3 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>Сортировка по номерам: как её восстановить</h2>
+  </div>
+
+  <p>Вы правы — на ФИПИ такой сортировки нет. Банк размечен <strong>по кодификатору</strong> (8 тем и подтем), а не по позиции задания в варианте. Именно поэтому найти «все задачи №14» там невозможно.</p>
+
+  <p>Но связь восстанавливается: спецификация ОГЭ 2026 задаёт для <em>каждого номера</em> его КЭС-коды и уровень. Это обратная таблица — и она у вас уже лежит в <code>research/fipi-2026/spec.txt</code>. Складываем её с типом ответа из банка:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>КЭС в банке</th><th>Тип ответа</th><th class="num">Возможные №</th><th>Разрешимость</th></tr></thead>
+      <tbody>
+        <tr><td>4 · Последовательности</td><td>краткий</td><td class="num">14</td><td><span class="pill ok">однозначно</span></td></tr>
+        <tr><td>5 · Функции</td><td>развёрнутый</td><td class="num">22</td><td><span class="pill ok">однозначно</span></td></tr>
+        <tr><td>5 · Функции</td><td>краткий</td><td class="num">11</td><td><span class="pill ok">однозначно</span></td></tr>
+        <tr><td>8.2 · Вероятность</td><td>краткий</td><td class="num">10</td><td><span class="pill ok">по подтеме</span></td></tr>
+        <tr><td>8.1 · Описательная статистика</td><td>краткий</td><td class="num">5</td><td><span class="pill ok">по подтеме</span></td></tr>
+        <tr><td>2 · Алг. выражения</td><td>краткий</td><td class="num">8, 12</td><td><span class="pill info">нужен текст</span></td></tr>
+        <tr><td>3 · Уравнения</td><td>краткий</td><td class="num">9, 13</td><td><span class="pill info">нужен текст</span></td></tr>
+        <tr><td>2, 3</td><td>развёрнутый</td><td class="num">20, 21</td><td><span class="pill info">нужен текст</span></td></tr>
+        <tr><td>7 · Геометрия</td><td>краткий</td><td class="num">15–19</td><td><span class="pill info">нужен текст</span></td></tr>
+        <tr><td>7 · Геометрия</td><td>развёрнутый</td><td class="num">23, 24, 25</td><td><span class="pill info">нужен текст</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Четыре сигнала, которые закрывают почти всё</h3>
+
+  <ol>
+    <li><strong>Тип ответа режет часть 1 от части 2.</strong> «Развёрнутый ответ» — это ровно задания 20–25, и таких в банке <strong>909</strong>. Остальные 2975 — часть 1.</li>
+    <li><strong>«Установление соответствия» → это №11.</strong> В ОГЭ по математике такой формат встречается практически только там. В банке их 101 — считайте, папка №11 наполнилась одним фильтром.</li>
+    <li><strong>Текстовые сигнатуры номеров устойчивы.</strong> «на клетчатой бумаге с размером клетки 1×1» → №18. «Какое из следующих утверждений является истинным» → №19. «рассчитывается по формуле … Пользуясь этой формулой» → №12 (это буквально задача, которую я вытащил примером). Регулярки закрывают тысячи задач без всякой модели.</li>
+    <li><strong><code>zid</code> — «номер группы».</strong> Задания 1–5 в ОГЭ идут пятёркой к одному сюжету. В фильтрах ФИПИ есть отдельное поле номера группы — это самый чистый способ поймать весь блок 1–5 целиком и разложить внутри него по порядку.</li>
+  </ol>
+
+  <p>Что не закрылось сигнатурами — прежде всего геометрия 15–19 и 23–25 — уходит на классификацию моделью: условие + КЭС + тип ответа на входе, номер и уверенность на выходе. Всё, что ниже порога уверенности, попадает в ручную очередь. По моей оценке это единицы процентов от 3884.</p>
+
+  <div class="note ok">
+    <span class="lbl">Что это значит на практике</span>
+    <p>Сортировка по номерам ОГЭ — <strong>ваша собственная разметка</strong>, которой нет ни у ФИПИ, ни у конкурентов из коробки. Это и есть главная ценность банка, а не сам факт наличия задач.</p>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section>
+  <div class="sec-head">
+    <span class="sec-num">04</span>
+    <h2>Что делаем дальше</h2>
+  </div>
+
+  <h3>Сначала — одно продуктовое решение</h3>
+
+  <p>ФИПИ пишет на банке «Все права защищены». Это не значит «нельзя трогать», но значит, что режим использования выбираете вы, и от выбора зависит вся архитектура. Три реальных варианта:</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Режим</th><th>Что храним</th><th>Что показываем</th><th>Риск</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="strong">A. Внутренний банк</td>
+          <td>Всё: тексты, картинки, разметку</td>
+          <td>Себе и своим ученикам, не в открытый доступ</td>
+          <td><span class="pill ok">низкий</span></td>
+        </tr>
+        <tr>
+          <td class="strong">B. Витрина + ссылка</td>
+          <td>Метаданные, номер, КЭС, свою классификацию, хеш картинки</td>
+          <td>Публично — номер, тему, тип; условие открывается на ФИПИ</td>
+          <td><span class="pill ok">низкий</span></td>
+        </tr>
+        <tr>
+          <td class="strong">C. Публичная копия</td>
+          <td>Всё, включая изображения</td>
+          <td>Публично, как свой контент</td>
+          <td><span class="pill bad">нужен юрист</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Мой совет — <strong>начинать с A</strong>. Технически A и B — это одна и та же база с разным флагом публикации, и переключиться потом стоит один вечер. А вот выбрать C сразу и потом откатываться — дорого. Тем более что вся ваша редакционная машина из раздела 01 уже написана именно под этот переход и наконец пригодится по назначению.</p>
+
+  <h3>Порядок работ</h3>
+
+  <div class="pipe">
+    <div class="step"><span class="n">ШАГ 1</span><span class="t">Починить справочник КИМ</span><span class="d">Вывести 25 номеров и их КЭС прямо из <code>spec.txt</code>. Без этого сортировать не во что.</span></div>
+    <div class="step"><span class="n">ШАГ 2</span><span class="t">Сборщик ФИПИ</span><span class="d">39 запросов, windows-1251, MathML → LaTeX, картинки из <code>ShowPictureQ</code>. Сырьё складывается как есть.</span></div>
+    <div class="step"><span class="n">ШАГ 3</span><span class="t">Классификатор номеров</span><span class="d">КЭС + тип ответа + сигнатуры, остаток — моделью. Каждой задаче — номер и уверенность.</span></div>
+    <div class="step"><span class="n">ШАГ 4</span><span class="t">Импорт в базу</span><span class="d">Через существующие таблицы. GUID ФИПИ — ключ идемпотентности, повторный прогон ничего не задваивает.</span></div>
+    <div class="step"><span class="n">ШАГ 5</span><span class="t">Экран «Банк по номерам»</span><span class="d">25 папок, счётчики, фильтр по картинке. Ровно то, чего нет у ФИПИ.</span></div>
+    <div class="step"><span class="n">ШАГ 6</span><span class="t">Ответы и чистка</span><span class="d">Верификация через <code>solve.php</code>, затем вынос мёртвого кода из раздела 01.</span></div>
+  </div>
+
+  <p>Шаги 1–3 — это отдельный скрипт, который вообще не трогает приложение: на выходе <code>JSONL</code> плюс папка с картинками. Их можно сделать и проверить полностью независимо, до любых изменений в базе. Именно поэтому я бы начал с них — риск нулевой, а на четвёртом шаге у вас на руках уже весь банк.</p>
+
+  <h3>Чего сознательно не делаем сейчас</h3>
+
+  <p>Не трогаем теорию, репетиторский контур, варианты, промо и планировщик. Они заморожены до момента, когда в банке будут тысячи размеченных задач — тогда варианты станут осмысленными сами собой. Удаление мёртвого кода тоже отложено на шаг 6: чистка приятна, но она не приближает банк, а конфликты при ней ловить неприятно.</p>
+
+  <div class="note">
+    <span class="lbl">Одно предупреждение по сборщику</span>
+    <p>39 запросов подряд — это вежливо. Ставьте паузу между страницами, один живой User-Agent, и кэшируйте сырой HTML на диск. Второй прогон должен читать кэш, а не долбить ФИПИ заново — вы будете переписывать классификатор десятки раз, и каждый раз ходить в сеть незачем.</p>
+  </div>
+</section>
+
+<footer class="end">
+  Школа 911 · разбор от 16.08.2026 · протокол ФИПИ проверен на живых запросах
+</footer>
+
+</div>

@@ -112,3 +112,12 @@ temp/
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
 .project-config.json
+
+# ФИПИ importer working data.
+# The scraped bank stays local: the project runs in internal-bank mode, and
+# committing ФИПИ statements and diagrams would make the repository a copy of
+# them. `tools/fipi/README.md` explains how to rebuild it in ten minutes.
+tools/fipi/cache/
+tools/fipi/out/
+__pycache__/
+*.pyc
