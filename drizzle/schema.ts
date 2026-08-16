@@ -362,6 +362,7 @@ export const tasks = mysqlTable(
       .notNull()
       .references(() => examTaskTypes.id, { onDelete: "restrict" }),
     slug: varchar("slug", { length: 160 }).notNull(),
+    /** Server-generated immutable editorial identifier; it is never accepted from editor input. */
     internalId: varchar("internalId", { length: 64 }).notNull(),
     title: varchar("title", { length: 220 }).notNull(),
     statementMarkdown: text("statementMarkdown").notNull(),

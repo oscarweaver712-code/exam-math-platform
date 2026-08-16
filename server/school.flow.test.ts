@@ -330,6 +330,14 @@ describe("public bank and tutor homework flow", () => {
     await expect(studentCaller.school.admin.archiveTask({ taskId: publicTasks.items[0].id })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const createdTask = await adminCaller.school.admin.createTask(taskInput);
     temporaryTaskIds.push(createdTask.taskId);
+    expect(createdTask.internalId).toMatch(/^SH911-OGE-[A-Z0-9_-]+$/);
+    await expect(adminCaller.school.admin.tasks({ page: 1, pageSize: 6, internalId: createdTask.internalId })).resolves.toEqual(expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ id: createdTask.taskId, internalId: createdTask.internalId })]) }));
+    await adminCaller.school.admin.updateTask({ ...taskInput, taskId: createdTask.taskId, title: "Редакционная задача с источником — обновлена" });
+    await expect(adminCaller.school.admin.getTask({ taskId: createdTask.taskId })).resolves.toEqual(expect.objectContaining({ internalId: createdTask.internalId, title: "Редакционная задача с источником — обновлена" }));
+    const authorTask = await adminCaller.school.admin.createTask({ ...taskInput, title: "Авторская задача для immutable ID", slug: `author-id-${suffix}`, sourceKind: "author", sourceTitle: "Авторская тренировочная задача Школы 911", sourceUrl: undefined, sourceRecordId: undefined });
+    temporaryTaskIds.push(authorTask.taskId);
+    expect(authorTask.internalId).toMatch(/^SH911-OGE-[A-Z0-9_-]+$/);
+    await expect(adminCaller.school.admin.getTask({ taskId: authorTask.taskId })).resolves.toEqual(expect.objectContaining({ sourceKind: "author", sourceTitle: "Авторская тренировочная задача Школы 911", sourceUrl: null }));
     await expect(adminCaller.school.admin.updateTaskSource({ taskId: createdTask.taskId, sourceKind: "fipi", sourceTitle: "", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceExamYear: 2026 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const publicCaller = appRouter.createCaller(createContext(null));
     expect((await publicCaller.publicBank.listTasks({})).items).toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId, sourceExamYear: 2026 })]));

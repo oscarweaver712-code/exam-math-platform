@@ -38,6 +38,9 @@ import { ensureOgeSeedData } from "../ogeSeed";
 import { canCreateHomework } from "../learningPolicy";
 import { storagePut } from "../storage";
 
+const IMMUTABLE_TASK_ID_PREFIX = "SH911-OGE";
+const createImmutableTaskId = () => `${IMMUTABLE_TASK_ID_PREFIX}-${nanoid(12).toUpperCase()}`;
+
 async function requireDb() {
   const db = await getDb();
   if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "База данных временно недоступна." });
@@ -75,14 +78,18 @@ const adminTaskInput = z.object({
   kimNumber: z.string(),
   answerKind: z.enum(["short_integer", "short_decimal", "short_text", "manual"]),
   correctAnswer: z.string().max(1024).optional(),
-  sourceKind: z.enum(["fipi", "partner"]),
+  sourceKind: z.enum(["author", "fipi", "partner"]),
   sourceTitle: z.string().trim().min(3).max(255),
-  sourceUrl: z.string().url().max(1024),
+  sourceUrl: z.string().trim().url().max(1024).optional().or(z.literal("")),
   sourceRecordId: z.string().trim().max(255).optional(),
   sourceExamYear: z.number().int().min(2023).max(2026),
   hints: z.array(z.object({ title: z.string().trim().min(2).max(160), bodyMarkdown: z.string().trim().min(5).max(4000) })).max(6).default([]),
   solutionSteps: z.array(z.object({ title: z.string().trim().min(2).max(180), bodyMarkdown: z.string().trim().min(5).max(6000) })).max(12).default([]),
   status: z.enum(["draft", "review", "published"]).default("draft"),
+}).superRefine((input, ctx) => {
+  if (input.sourceKind !== "author" && !input.sourceUrl?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["sourceUrl"], message: "Для внешнего источника обязателен проверяемый URL." });
+  }
 });
 
 const taskLifecycleInput = z.object({ taskId: z.number().int().positive(), note: z.string().trim().min(3).max(500).optional() });
@@ -91,6 +98,7 @@ const editorialTaskQueueInput = z.object({
   pageSize: z.number().int().min(6).max(24).default(12),
   status: z.enum(["draft", "review", "published", "archived"]).optional(),
   sourceExamYear: z.number().int().min(2023).max(2026).optional(),
+  internalId: z.string().trim().min(3).max(64).optional(),
 });
 
 async function recordTaskEvent(
@@ -100,7 +108,7 @@ async function recordTaskEvent(
   eventType: "created" | "updated" | "published" | "archived" | "restored" | "soft_deleted" | "source_updated" | "media_added" | "media_approved" | "media_rejected" | "media_removed",
   note?: string,
 ) {
-  const [task] = await db.select({ title: tasks.title, slug: tasks.slug, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, contentVersion: tasks.contentVersion, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  const [task] = await db.select({ internalId: tasks.internalId, title: tasks.title, slug: tasks.slug, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, contentVersion: tasks.contentVersion, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
   if (!task) return;
   await db.insert(taskEditorialEvents).values({ taskId, editorUserId, eventType, note: note || null, snapshot: task, createdAt: Date.now() });
 }
@@ -368,6 +376,7 @@ export const schoolRouter = router({
       const filters = [eq(tasks.examTrackId, trackId)];
       if (input?.status) filters.push(eq(tasks.status, input.status));
       if (input?.sourceExamYear) filters.push(eq(tasks.sourceExamYear, input.sourceExamYear));
+      if (input?.internalId) filters.push(sql`${tasks.internalId} LIKE ${`%${input.internalId}%`}`);
       const [totalRow] = await db.select({ total: sql<number>`count(${tasks.id})` }).from(tasks).where(and(...filters));
       const items = await db
         .select({ id: tasks.id, internalId: tasks.internalId, title: tasks.title, slug: tasks.slug, status: tasks.status, sourceKind: tasks.sourceKind, sourceTitle: tasks.sourceTitle, sourceUrl: tasks.sourceUrl, sourceRecordId: tasks.sourceRecordId, sourceExamYear: tasks.sourceExamYear, archivedAt: tasks.archivedAt, deletedAt: tasks.deletedAt, kimNumber: examTaskTypes.kimNumber, topicTitle: curriculumUnits.title })
@@ -495,13 +504,14 @@ export const schoolRouter = router({
       if (!source || source.status !== "cleared" || source.convertedTaskId || !topic[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Импорт должен быть одобрен и ещё не сконвертирован; тема должна существовать." });
       if (input.answerKind !== "manual" && !input.correctAnswer) throw new TRPCError({ code: "BAD_REQUEST", message: "Для автоматически проверяемой задачи укажите ответ." });
       const timestamp = Date.now();
-      const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: source.examTaskTypeId, slug: input.slug, internalId: `TASK-${nanoid(12).toUpperCase()}`, title: input.title, statementMarkdown: input.statementMarkdown, answerKind: input.answerKind, correctAnswer: input.correctAnswer || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown, sourceKind: source.sourceKind, sourceTitle: source.sourceTitle, sourceUrl: source.sourceUrl, sourceRecordId: source.sourceRecordId, sourceAccessedAt: source.sourceAccessedAt, sourceExamYear: source.sourceExamYear, contentVersion: 1, status: "draft", createdAt: timestamp, updatedAt: timestamp });
+      const internalId = createImmutableTaskId();
+      const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: source.examTaskTypeId, slug: input.slug, internalId, title: input.title, statementMarkdown: input.statementMarkdown, answerKind: input.answerKind, correctAnswer: input.correctAnswer || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown, sourceKind: source.sourceKind, sourceTitle: source.sourceTitle, sourceUrl: source.sourceUrl, sourceRecordId: source.sourceRecordId, sourceAccessedAt: source.sourceAccessedAt, sourceExamYear: source.sourceExamYear, contentVersion: 1, status: "draft", createdAt: timestamp, updatedAt: timestamp });
       const taskId = Number(inserted[0].insertId);
       await db.insert(taskCurriculumUnits).values({ taskId, curriculumUnitId: topic[0].id });
       await db.update(contentImportCases).set({ status: "converted", convertedTaskId: taskId, updatedAt: timestamp }).where(eq(contentImportCases.id, source.id));
       await recordTaskEvent(db, taskId, ctx.user.id, "created", `Черновик создан из правового импорта #${source.id}.`);
       await recordImportEvent(db, source.id, ctx.user.id, "converted", `Создан редакторский черновик задачи #${taskId}.`);
-      return { taskId };
+      return { taskId, internalId };
     }),
     externalMediaQueue: adminProcedure.input(z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(6).max(24).default(12) })).query(async ({ input }) => {
       const { db, trackId } = await getMathTrack();
@@ -571,16 +581,17 @@ export const schoolRouter = router({
         if (!topic[0] || !taskType[0]) throw new TRPCError({ code: "BAD_REQUEST", message: "Неверная тема или номер КИМ." });
         if (input.answerKind !== "manual" && !input.correctAnswer?.trim()) throw new TRPCError({ code: "BAD_REQUEST", message: "Для Части 1 нужен правильный ответ." });
         const timestamp = Date.now();
-        const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType[0].id, slug: input.slug, internalId: `TASK-${nanoid(12).toUpperCase()}`, title: input.title.trim(), statementMarkdown: input.statementMarkdown.trim(), answerKind: input.answerKind, correctAnswer: input.correctAnswer?.trim() || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown.trim(), sourceKind: input.sourceKind, sourceTitle: input.sourceTitle.trim(), sourceUrl: input.sourceUrl.trim(), sourceRecordId: input.sourceRecordId?.trim() || null, sourceAccessedAt: timestamp, sourceExamYear: input.sourceExamYear, contentVersion: 1, status: input.status, createdAt: timestamp, updatedAt: timestamp, publishedAt: input.status === "published" ? timestamp : null });
+        const internalId = createImmutableTaskId();
+        const inserted = await db.insert(tasks).values({ subjectId, examTrackId: trackId, examTaskTypeId: taskType[0].id, slug: input.slug, internalId, title: input.title.trim(), statementMarkdown: input.statementMarkdown.trim(), answerKind: input.answerKind, correctAnswer: input.correctAnswer?.trim() || null, acceptableAnswers: [], solutionMarkdown: input.solutionMarkdown.trim(), sourceKind: input.sourceKind, sourceTitle: input.sourceTitle.trim(), sourceUrl: input.sourceUrl?.trim() || null, sourceRecordId: input.sourceRecordId?.trim() || null, sourceAccessedAt: timestamp, sourceExamYear: input.sourceExamYear, contentVersion: 1, status: input.status, createdAt: timestamp, updatedAt: timestamp, publishedAt: input.status === "published" ? timestamp : null });
         const taskId = Number(inserted[0].insertId);
         await db.insert(taskCurriculumUnits).values({ taskId, curriculumUnitId: topic[0].id });
         if (input.hints.length) await db.insert(taskHints).values(input.hints.map((hint, index) => ({ taskId, title: hint.title, bodyMarkdown: hint.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         if (input.solutionSteps.length) await db.insert(taskSolutionSteps).values(input.solutionSteps.map((step, index) => ({ taskId, title: step.title, bodyMarkdown: step.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         await recordTaskEvent(db, taskId, ctx.user.id, input.status === "published" ? "published" : "created", "Создание записи в банке.");
-        return { taskId };
+        return { taskId, internalId };
       }),
     updateTask: adminProcedure
-      .input(adminTaskInput.extend({ taskId: z.number().int().positive() }))
+      .input(adminTaskInput.safeExtend({ taskId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const { db, trackId, subjectId } = await getMathTrack();
         const [existing, topic, taskType] = await Promise.all([
@@ -602,7 +613,7 @@ export const schoolRouter = router({
           solutionMarkdown: input.solutionMarkdown.trim(),
           sourceKind: input.sourceKind,
           sourceTitle: input.sourceTitle.trim(),
-          sourceUrl: input.sourceUrl.trim(),
+          sourceUrl: input.sourceUrl?.trim() || null,
           sourceRecordId: input.sourceRecordId?.trim() || null,
           sourceAccessedAt: timestamp,
           sourceExamYear: input.sourceExamYear,

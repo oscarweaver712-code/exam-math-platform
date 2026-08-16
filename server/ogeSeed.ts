@@ -23,6 +23,13 @@ import { createPublishedMonthlyVariant, monthKeyFrom } from "./variantService";
 
 const now = () => Date.now();
 
+const AUTHOR_TEMPLATE_SAMPLES = [
+  ["author-sample-tariff", "Авторская тренировка: тариф", "Для подключения к сервису выбрали тариф: 150 рублей в месяц и 6 рублей за каждую минуту сверх 20 минут. За месяц использовали 38 минут. Сколько рублей составила плата?", "short_integer", "258", "Сверх включённых минут использовано `38 − 20 = 18` минут. Доплата: `18 × 6 = 108` рублей. Общая плата: `150 + 108 = 258` рублей.", "practical-context", "1"],
+  ["author-sample-probability", "Авторская тренировка: вероятность", "В непрозрачном мешке лежат 5 синих, 3 зелёных и 2 жёлтых жетона. Наугад достают один жетон. Какова вероятность достать зелёный жетон?", "short_decimal", "0.3", "Всего жетонов `5 + 3 + 2 = 10`. Зелёных жетонов 3, поэтому вероятность равна `3 / 10 = 0,3`.", "probability", "10"],
+  ["author-sample-function-graph", "Авторская тренировка: график функции", "На авторской схеме изображен график функции `y = 3x − 2`. Найдите значение функции при `x = 4`.", "short_integer", "10", "Подставляем `x = 4`: `y = 3 × 4 − 2 = 10`.", "graphs-functions", "11"],
+  ["author-sample-triangle", "Авторская тренировка: углы треугольника", "На авторской схеме два угла треугольника равны 48° и 67°. Найдите третий угол в градусах.", "short_integer", "65", "Сумма углов треугольника равна 180°. Поэтому третий угол: `180 − 48 − 67 = 65`.", "plane-geometry", "15"],
+] as const;
+
 const THEORY_SEED = [
   ["percentages-proportions", "Проценты и пропорции", "Находите часть от величины, переводя проценты в дробь или десятичную дробь.", "## Правило\n\n`p% = p / 100`. Чтобы найти `p%` от числа `A`, вычислите `A × p / 100`.\n\n## Алгоритм\n\n1. Определите исходную величину.\n2. Переведите процент в дробь или десятичную запись.\n3. Умножьте исходную величину на полученную дробь.\n4. В задаче о скидке вычтите найденную часть из исходной цены.\n\n## Типичная ошибка\n\nНе путайте **размер скидки** и **цену после скидки**. При скидке 15% покупатель платит 85% исходной цены.\n\n## Практика\n\nРешите задачи на скидку, наценку и нахождение целого по известному проценту.", "calculations-percentages", "6"],
   ["fractions-and-order", "Дроби и порядок действий", "Сначала упрощайте дроби и соблюдайте порядок действий: скобки, умножение и деление, сложение и вычитание.", "## Правило\n\nЧтобы сложить дроби, приведите их к общему знаменателю. Чтобы разделить на дробь, умножьте на обратную.\n\n## Алгоритм\n\n1. Выполните действия в скобках.\n2. Сократите дроби, если это возможно.\n3. Выполните умножение и деление слева направо.\n4. Завершите сложением и вычитанием.\n\n## Типичная ошибка\n\nНельзя складывать числители и знаменатели напрямую: `a/b + c/d` не равно `(a+c)/(b+d)`.\n\n## Практика\n\nТренируйте вычисления с обыкновенными и десятичными дробями.", "calculations-percentages", "6"],
@@ -287,6 +294,50 @@ async function ensureVerifiedOgeBatch(db: NonNullable<Awaited<ReturnType<typeof 
   await db.insert(taskTheoryUnits).values(missing.map(([slug, , , , , , , , , theorySlug]) => ({ taskId: idFor(taskIds, slug), theoryUnitId: idFor(theoryIds, theorySlug) })));
 }
 
+async function ensureAuthorTemplateSamples(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, subjectId: number, trackId: number) {
+  const existingRows = await db.select({ slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  const existingSlugs = new Set(existingRows.map(row => row.slug));
+  const missing = AUTHOR_TEMPLATE_SAMPLES.filter(([slug]) => !existingSlugs.has(slug));
+  if (!missing.length) return;
+  const [topicRows, taskTypeRows] = await Promise.all([
+    db.select({ id: curriculumUnits.id, slug: curriculumUnits.slug }).from(curriculumUnits).where(eq(curriculumUnits.subjectId, subjectId)),
+    db.select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber }).from(examTaskTypes).where(eq(examTaskTypes.examTrackId, trackId)),
+  ]);
+  const topicIds = new Map(topicRows.map(row => [row.slug, row.id]));
+  const taskTypeIds = new Map(taskTypeRows.map(row => [row.kimNumber, row.id]));
+  const timestamp = now();
+  await db.insert(tasks).values(missing.map(([slug, title, statementMarkdown, answerKind, correctAnswer, solutionMarkdown, topicSlug, kimNumber]) => ({
+    subjectId,
+    examTrackId: trackId,
+    examTaskTypeId: idFor(taskTypeIds, kimNumber),
+    slug,
+    internalId: `SH911-OGE-SAMPLE-${slug.toUpperCase()}`,
+    title,
+    statementMarkdown,
+    answerKind,
+    correctAnswer,
+    acceptableAnswers: [],
+    solutionMarkdown,
+    sourceKind: "author" as const,
+    sourceTitle: "Авторская тренировочная задача Школы 911",
+    sourceAccessedAt: timestamp,
+    sourceExamYear: 2026,
+    contentVersion: 1,
+    status: "published" as const,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    publishedAt: timestamp,
+  })));
+  const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
+  await db.insert(taskCurriculumUnits).values(missing.map(([slug, , , , , , topicSlug]) => ({ taskId: idFor(taskIds, slug), curriculumUnitId: idFor(topicIds, topicSlug) })));
+  const visualSeed = [
+    ["author-sample-function-graph", "function-line-3x-minus-2", "Авторская координатная плоскость с графиком прямой y равно 3x минус 2."],
+    ["author-sample-triangle", "triangle-angle-48-67", "Авторская схема треугольника с углами 48 и 67 градусов."],
+  ] as const;
+  await db.insert(taskVisuals).values(visualSeed.map(([slug, diagramKey, altText], index) => ({ taskId: idFor(taskIds, slug), kind: "inline_svg" as const, placement: "statement" as const, diagramKey, altText, sourceKind: "author" as const, reviewStatus: "approved" as const, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+}
+
 function idFor(map: Map<string, number>, key: string) {
   const id = map.get(key);
   if (!id) throw new Error(`Seed reference is missing: ${key}`);
@@ -392,6 +443,7 @@ async function seedOgeData() {
       await ensureTheorySeed(db, existing[0].id, track.id);
       await ensureAuthorTaskExpansion(db, existing[0].id, track.id);
       await ensureVerifiedOgeBatch(db, existing[0].id, track.id);
+      await ensureAuthorTemplateSamples(db, existing[0].id, track.id);
       await ensureTheoryPracticeLinks(db, track.id);
       await ensureTaskVisualSeed(db, track.id);
       await ensureTheoryVisualSeed(db, existing[0].id);
@@ -598,6 +650,7 @@ async function seedOgeData() {
   );
   await ensureAuthorTaskExpansion(db, subject.id, track.id);
   await ensureVerifiedOgeBatch(db, subject.id, track.id);
+  await ensureAuthorTemplateSamples(db, subject.id, track.id);
   await ensureTheoryPracticeLinks(db, track.id);
   await ensureTaskVisualSeed(db, track.id);
   await ensureTheoryVisualSeed(db, subject.id);
