@@ -39,6 +39,9 @@ import { ensureOgeSeedData } from "./ogeSeed";
 import { buildEphemeralVariant } from "./variantService";
 import { schoolRouter } from "./routers/school";
 
+/** Title the importer gives the text a group of questions shares. */
+const SHARED_INTRO_TITLE = "Общее условие";
+
 const publicFilters = z.object({
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
@@ -247,7 +250,7 @@ export const appRouter = router({
       const ids = catalog.map(task => task.id);
       const [visualRows, additionalRows] = ids.length ? await Promise.all([
         db.select({ id: taskVisuals.id, taskId: taskVisuals.taskId, kind: taskVisuals.kind, placement: taskVisuals.placement, diagramKey: taskVisuals.diagramKey, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption }).from(taskVisuals).where(and(inArray(taskVisuals.taskId, ids), eq(taskVisuals.reviewStatus, "approved"))).orderBy(asc(taskVisuals.sortOrder)),
-        db.select({ taskId: taskAdditionalMaterials.taskId }).from(taskAdditionalMaterials).where(inArray(taskAdditionalMaterials.taskId, ids)),
+        db.select({ taskId: taskAdditionalMaterials.taskId, title: taskAdditionalMaterials.title, bodyMarkdown: taskAdditionalMaterials.bodyMarkdown }).from(taskAdditionalMaterials).where(inArray(taskAdditionalMaterials.taskId, ids)).orderBy(asc(taskAdditionalMaterials.sortOrder)),
       ]) : [[], []];
       const immediateVisuals = new Map<number, typeof visualRows>();
       const extraMaterialCount = new Map<number, number>();
@@ -255,7 +258,17 @@ export const appRouter = router({
         if (visual.placement === "statement") immediateVisuals.set(visual.taskId, [...(immediateVisuals.get(visual.taskId) ?? []), visual]);
         if (visual.placement === "supplement") extraMaterialCount.set(visual.taskId, (extraMaterialCount.get(visual.taskId) ?? 0) + 1);
       }
-      for (const material of additionalRows) extraMaterialCount.set(material.taskId, (extraMaterialCount.get(material.taskId) ?? 0) + 1);
+      // The practical block states one situation and asks five questions about
+      // it. The shared text belongs next to the drawing, not behind a
+      // «показать ещё» button — without it the question cannot be read at all.
+      const sharedIntro = new Map<number, string>();
+      for (const material of additionalRows) {
+        if (material.title === SHARED_INTRO_TITLE) {
+          sharedIntro.set(material.taskId, material.bodyMarkdown);
+          continue;
+        }
+        extraMaterialCount.set(material.taskId, (extraMaterialCount.get(material.taskId) ?? 0) + 1);
+      }
 
       // Latest verdict per task for this learner, so the listing can show
       // «ВЕРНО / НЕВЕРНО / НЕ РЕШЕНО» the way the ФИПИ bank does.
@@ -278,6 +291,7 @@ export const appRouter = router({
           catalogNumber: task.catalogNumber!,
           statementVisuals: immediateVisuals.get(task.id) ?? [],
           additionalMaterialCount: extraMaterialCount.get(task.id) ?? 0,
+          sharedIntro: sharedIntro.get(task.id) ?? null,
           attemptStatus: attempt?.checkStatus ?? null,
           attemptIsCorrect: attempt?.isCorrect ?? null,
         };
