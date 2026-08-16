@@ -1,7 +1,7 @@
 type TaskVisual = {
   id: number;
   kind: "inline_svg" | "image_asset";
-  placement: "statement" | "solution";
+  placement: "statement" | "supplement" | "solution";
   diagramKey: string | null;
   assetUrl: string | null;
   altText: string;
@@ -24,8 +24,8 @@ function Diagram({ diagramKey, altText }: { diagramKey: string | null; altText: 
   return <div className="p-5 text-sm text-[#aaa7ae]">Диаграмма для этой задачи готовится редактором.</div>;
 }
 
-export function TaskVisuals({ visuals, placement }: { visuals: TaskVisual[]; placement: "statement" | "solution" }) {
+export function TaskVisuals({ visuals, placement, compact = false }: { visuals: TaskVisual[]; placement: "statement" | "supplement" | "solution"; compact?: boolean }) {
   const selected = visuals.filter(visual => visual.placement === placement);
   if (!selected.length) return null;
-  return <div className="mt-7 space-y-4">{selected.map(visual => <figure key={visual.id} className="overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e10] p-3 sm:p-5">{visual.kind === "inline_svg" ? <Diagram diagramKey={visual.diagramKey} altText={visual.altText} /> : visual.assetUrl ? <img src={visual.assetUrl} alt={visual.altText} className="max-h-[480px] w-full rounded-xl object-contain" /> : null}{visual.caption ? <figcaption className="mt-3 border-t border-white/8 pt-3 text-xs leading-5 text-[#8c8990]">{visual.caption}</figcaption> : null}</figure>)}</div>;
+  return <div className={`${compact ? "mt-5" : "mt-7"} space-y-4`}>{selected.map(visual => <figure key={visual.id} className={`overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e10] ${compact ? "p-3" : "p-3 sm:p-5"}`}>{visual.kind === "inline_svg" ? <div className={compact ? "mx-auto max-w-[560px]" : ""}><Diagram diagramKey={visual.diagramKey} altText={visual.altText} /></div> : visual.assetUrl ? <img src={visual.assetUrl} alt={visual.altText} className={`${compact ? "max-h-[300px]" : "max-h-[480px]"} w-full rounded-xl object-contain`} /> : null}{visual.caption ? <figcaption className="mt-3 border-t border-white/8 pt-3 text-xs leading-5 text-[#8c8990]">{visual.caption}</figcaption> : null}</figure>)}</div>;
 }

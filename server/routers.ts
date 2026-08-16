@@ -13,6 +13,7 @@ import {
   savedTasks,
   subjects,
   taskAttempts,
+  taskAdditionalMaterials,
   taskCurriculumUnits,
   taskHints,
   taskSolutionSteps,
@@ -181,10 +182,12 @@ export const appRouter = router({
       const catalog = await db
         .select({
           id: tasks.id,
+          catalogNumber: tasks.catalogNumber,
           internalId: tasks.internalId,
           slug: tasks.slug,
           title: tasks.title,
           statementMarkdown: tasks.statementMarkdown,
+          answerKind: tasks.answerKind,
           status: tasks.status,
           sourceKind: tasks.sourceKind,
           sourceTitle: tasks.sourceTitle,
@@ -206,10 +209,30 @@ export const appRouter = router({
         .limit(input.pageSize)
         .offset(offset);
       const ids = catalog.map(task => task.id);
-      const visualRows = ids.length ? await db.select({ taskId: taskVisuals.taskId }).from(taskVisuals).where(and(inArray(taskVisuals.taskId, ids), eq(taskVisuals.reviewStatus, "approved"))) : [];
-      const visualTaskIds = new Set(visualRows.map(item => item.taskId));
+      const [visualRows, additionalRows] = ids.length ? await Promise.all([
+        db.select({ id: taskVisuals.id, taskId: taskVisuals.taskId, kind: taskVisuals.kind, placement: taskVisuals.placement, diagramKey: taskVisuals.diagramKey, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption }).from(taskVisuals).where(and(inArray(taskVisuals.taskId, ids), eq(taskVisuals.reviewStatus, "approved"))).orderBy(asc(taskVisuals.sortOrder)),
+        db.select({ taskId: taskAdditionalMaterials.taskId }).from(taskAdditionalMaterials).where(inArray(taskAdditionalMaterials.taskId, ids)),
+      ]) : [[], []];
+      const immediateVisuals = new Map<number, typeof visualRows>();
+      const extraMaterialCount = new Map<number, number>();
+      for (const visual of visualRows) {
+        if (visual.placement === "statement") immediateVisuals.set(visual.taskId, [...(immediateVisuals.get(visual.taskId) ?? []), visual]);
+        if (visual.placement === "supplement") extraMaterialCount.set(visual.taskId, (extraMaterialCount.get(visual.taskId) ?? 0) + 1);
+      }
+      for (const material of additionalRows) extraMaterialCount.set(material.taskId, (extraMaterialCount.get(material.taskId) ?? 0) + 1);
       const total = Number(totalRow?.total ?? 0);
-      return { items: catalog.map(task => ({ ...task, hasReviewedVisual: visualTaskIds.has(task.id) })), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
+      return { items: catalog.map(task => ({ ...task, catalogNumber: task.catalogNumber!, statementVisuals: immediateVisuals.get(task.id) ?? [], additionalMaterialCount: extraMaterialCount.get(task.id) ?? 0 })), total, page: input.page, pageSize: input.pageSize, pageCount: Math.max(1, Math.ceil(total / input.pageSize)) };
+    }),
+    getTaskMaterials: publicProcedure.input(z.object({ taskId: z.number().int().positive() })).query(async ({ input }) => {
+      const track = await getOgeTrack();
+      const db = await requireDb();
+      const [task] = await db.select({ id: tasks.id }).from(tasks).where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, track.id), eq(tasks.status, "published"))).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задание не найдено." });
+      const [materials, visuals] = await Promise.all([
+        db.select({ id: taskAdditionalMaterials.id, title: taskAdditionalMaterials.title, bodyMarkdown: taskAdditionalMaterials.bodyMarkdown, sortOrder: taskAdditionalMaterials.sortOrder }).from(taskAdditionalMaterials).where(eq(taskAdditionalMaterials.taskId, task.id)).orderBy(asc(taskAdditionalMaterials.sortOrder)),
+        db.select({ id: taskVisuals.id, kind: taskVisuals.kind, placement: taskVisuals.placement, diagramKey: taskVisuals.diagramKey, assetUrl: taskVisuals.assetUrl, altText: taskVisuals.altText, caption: taskVisuals.caption, sortOrder: taskVisuals.sortOrder }).from(taskVisuals).where(and(eq(taskVisuals.taskId, task.id), eq(taskVisuals.reviewStatus, "approved"), eq(taskVisuals.placement, "supplement"))).orderBy(asc(taskVisuals.sortOrder)),
+      ]);
+      return { materials, visuals };
     }),
     getTask: publicProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
       const track = await getOgeTrack();
@@ -217,6 +240,7 @@ export const appRouter = router({
       const [task] = await db
         .select({
           id: tasks.id,
+          catalogNumber: tasks.catalogNumber,
           slug: tasks.slug,
           title: tasks.title,
           statementMarkdown: tasks.statementMarkdown,
@@ -254,7 +278,7 @@ export const appRouter = router({
         db.select({ id: taskHints.id, title: taskHints.title, bodyMarkdown: taskHints.bodyMarkdown, sortOrder: taskHints.sortOrder }).from(taskHints).where(eq(taskHints.taskId, task.id)).orderBy(asc(taskHints.sortOrder)),
         db.select({ id: taskSolutionSteps.id, title: taskSolutionSteps.title, bodyMarkdown: taskSolutionSteps.bodyMarkdown, sortOrder: taskSolutionSteps.sortOrder }).from(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, task.id)).orderBy(asc(taskSolutionSteps.sortOrder)),
       ]);
-      return { ...task, relatedTheory, visuals, hints, solutionSteps };
+      return { ...task, catalogNumber: task.catalogNumber!, relatedTheory, visuals, hints, solutionSteps };
     }),
     checkAnswer: publicProcedure
       .input(z.object({ taskId: z.number().int().positive(), rawAnswer: z.string().min(1).max(1024) }))

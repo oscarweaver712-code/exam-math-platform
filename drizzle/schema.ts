@@ -364,6 +364,8 @@ export const tasks = mysqlTable(
     slug: varchar("slug", { length: 160 }).notNull(),
     /** Server-generated immutable editorial identifier; it is never accepted from editor input. */
     internalId: varchar("internalId", { length: 64 }).notNull(),
+    /** Human-readable, automatically assigned sequential number within the task bank. */
+    catalogNumber: int("catalogNumber"),
     title: varchar("title", { length: 220 }).notNull(),
     statementMarkdown: text("statementMarkdown").notNull(),
     answerChoices: json("answerChoices").$type<TaskChoice[]>(),
@@ -395,6 +397,7 @@ export const tasks = mysqlTable(
   table => [
     uniqueIndex("tasks_track_slug_unique").on(table.examTrackId, table.slug),
     uniqueIndex("tasks_internal_id_unique").on(table.internalId),
+    uniqueIndex("tasks_catalog_number_unique").on(table.catalogNumber),
     index("tasks_public_catalog_idx").on(table.examTrackId, table.status, table.examTaskTypeId),
     index("tasks_task_type_idx").on(table.examTaskTypeId),
     index("tasks_source_year_idx").on(table.sourceExamYear, table.sourceKind),
@@ -508,7 +511,7 @@ export const taskVisuals = mysqlTable(
       .notNull()
       .references(() => tasks.id, { onDelete: "cascade" }),
     kind: mysqlEnum("kind", ["inline_svg", "image_asset"]).notNull(),
-    placement: mysqlEnum("placement", ["statement", "solution"]).default("statement").notNull(),
+    placement: mysqlEnum("placement", ["statement", "supplement", "solution"]).default("statement").notNull(),
     diagramKey: varchar("diagramKey", { length: 120 }),
     assetUrl: varchar("assetUrl", { length: 2048 }),
     altText: text("altText").notNull(),
@@ -617,6 +620,21 @@ export const taskSolutionSteps = mysqlTable(
     updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
   },
   table => [index("task_solution_steps_task_order_idx").on(table.taskId, table.sortOrder)],
+);
+
+/** Optional text or LaTeX conditions that learners reveal only when they need extra context. */
+export const taskAdditionalMaterials = mysqlTable(
+  "task_additional_materials",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    taskId: int("taskId").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+    title: varchar("title", { length: 180 }).notNull(),
+    bodyMarkdown: text("bodyMarkdown").notNull(),
+    sortOrder: int("sortOrder").default(0).notNull(),
+    createdAt: bigint("createdAt", { mode: "number" }).notNull(),
+    updatedAt: bigint("updatedAt", { mode: "number" }).notNull(),
+  },
+  table => [index("task_additional_materials_task_order_idx").on(table.taskId, table.sortOrder)],
 );
 
 export const taskCurriculumUnits = mysqlTable(

@@ -7,6 +7,7 @@ import {
   taskCurriculumUnits,
   taskHints,
   taskSolutionSteps,
+  taskAdditionalMaterials,
   tasks,
   taskTheoryUnits,
   taskVisuals,
@@ -22,6 +23,11 @@ import { getDb } from "./db";
 import { createPublishedMonthlyVariant, monthKeyFrom } from "./variantService";
 
 const now = () => Date.now();
+
+async function ensureCatalogNumbers(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, trackId: number) {
+  const taskRows = await db.select({ id: tasks.id, catalogNumber: tasks.catalogNumber }).from(tasks).where(eq(tasks.examTrackId, trackId));
+  await Promise.all(taskRows.filter(task => task.catalogNumber === null).map(task => db.update(tasks).set({ catalogNumber: task.id }).where(eq(tasks.id, task.id))));
+}
 
 const AUTHOR_TEMPLATE_SAMPLES = [
   ["author-sample-tariff", "Авторская тренировка: тариф", "Для подключения к сервису выбрали тариф: 150 рублей в месяц и 6 рублей за каждую минуту сверх 20 минут. За месяц использовали 38 минут. Сколько рублей составила плата?", "short_integer", "258", "Сверх включённых минут использовано `38 − 20 = 18` минут. Доплата: `18 × 6 = 108` рублей. Общая плата: `150 + 108 = 258` рублей.", "practical-context", "1"],
@@ -336,6 +342,11 @@ async function ensureAuthorTemplateSamples(db: NonNullable<Awaited<ReturnType<ty
     ["author-sample-triangle", "triangle-angle-48-67", "Авторская схема треугольника с углами 48 и 67 градусов."],
   ] as const;
   await db.insert(taskVisuals).values(visualSeed.map(([slug, diagramKey, altText], index) => ({ taskId: idFor(taskIds, slug), kind: "inline_svg" as const, placement: "statement" as const, diagramKey, altText, sourceKind: "author" as const, reviewStatus: "approved" as const, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
+  const tariffTaskId = taskIds.get("author-sample-tariff");
+  if (tariffTaskId) {
+    const [existingMaterial] = await db.select({ id: taskAdditionalMaterials.id }).from(taskAdditionalMaterials).where(eq(taskAdditionalMaterials.taskId, tariffTaskId)).limit(1);
+    if (!existingMaterial) await db.insert(taskAdditionalMaterials).values({ taskId: tariffTaskId, title: "Дополнительное условие: как устроен тариф", bodyMarkdown: "В тариф уже включены первые 20 минут. Только минуты сверх лимита оплачиваются дополнительно по 6 рублей за минуту.", sortOrder: 1, createdAt: timestamp, updatedAt: timestamp });
+  }
 }
 
 function idFor(map: Map<string, number>, key: string) {
@@ -448,6 +459,7 @@ async function seedOgeData() {
       await ensureTaskVisualSeed(db, track.id);
       await ensureTheoryVisualSeed(db, existing[0].id);
       await ensureTaskLearningSupport(db, track.id);
+      await ensureCatalogNumbers(db, track.id);
       await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
       const [schedule] = await db.select({ id: variantGenerationSchedules.id }).from(variantGenerationSchedules).where(eq(variantGenerationSchedules.examTrackId, track.id)).limit(1);
       if (!schedule) await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
@@ -655,6 +667,7 @@ async function seedOgeData() {
   await ensureTaskVisualSeed(db, track.id);
   await ensureTheoryVisualSeed(db, subject.id);
   await ensureTaskLearningSupport(db, track.id);
+  await ensureCatalogNumbers(db, track.id);
   await createPublishedMonthlyVariant(db, track.id, monthKeyFrom());
   await db.insert(variantGenerationSchedules).values({ examTrackId: track.id, cronExpression: "0 0 3 1 * *", isActive: true, createdAt: now(), updatedAt: now() });
 
