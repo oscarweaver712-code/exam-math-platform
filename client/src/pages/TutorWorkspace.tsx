@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { MobileCabinetDrawer } from "@/components/CabinetSidebar";
 import { PlatformHeader } from "@/components/PlatformHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +56,6 @@ export default function TutorWorkspace() {
     <div className="min-h-screen bg-[#0b0b0d] text-[#f5f0e9]">
       <PlatformHeader />
       <main className="container py-10 sm:py-14 lg:pl-64">
-        <div className="mb-7 lg:hidden"><MobileCabinetDrawer learningRole="tutor" /></div>
         <section className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#151518] p-6 sm:p-8">
           <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-[#ff5b14]/15 blur-3xl" />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
