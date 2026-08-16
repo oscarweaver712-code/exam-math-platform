@@ -362,7 +362,7 @@ export const tasks = mysqlTable(
       .notNull()
       .references(() => examTaskTypes.id, { onDelete: "restrict" }),
     slug: varchar("slug", { length: 160 }).notNull(),
-    internalId: varchar("internalId", { length: 64 }),
+    internalId: varchar("internalId", { length: 64 }).notNull(),
     title: varchar("title", { length: 220 }).notNull(),
     statementMarkdown: text("statementMarkdown").notNull(),
     answerChoices: json("answerChoices").$type<TaskChoice[]>(),
@@ -371,9 +371,6 @@ export const tasks = mysqlTable(
     correctAnswer: varchar("correctAnswer", { length: 1024 }),
     acceptableAnswers: json("acceptableAnswers").$type<string[]>(),
     solutionMarkdown: text("solutionMarkdown").notNull(),
-    difficulty: mysqlEnum("difficulty", ["basic", "standard", "advanced"])
-      .default("standard")
-      .notNull(),
     sourceKind: mysqlEnum("sourceKind", ["author", "fipi", "partner"])
       .default("author")
       .notNull(),
@@ -397,8 +394,9 @@ export const tasks = mysqlTable(
   table => [
     uniqueIndex("tasks_track_slug_unique").on(table.examTrackId, table.slug),
     uniqueIndex("tasks_internal_id_unique").on(table.internalId),
-    index("tasks_public_catalog_idx").on(table.examTrackId, table.status, table.difficulty),
+    index("tasks_public_catalog_idx").on(table.examTrackId, table.status, table.examTaskTypeId),
     index("tasks_task_type_idx").on(table.examTaskTypeId),
+    index("tasks_source_year_idx").on(table.sourceExamYear, table.sourceKind),
   ],
 );
 
@@ -435,6 +433,7 @@ export const contentImportCases = mysqlTable(
     sourceUrl: varchar("sourceUrl", { length: 1024 }).notNull(),
     sourceRecordId: varchar("sourceRecordId", { length: 255 }),
     sourceAccessedAt: bigint("sourceAccessedAt", { mode: "number" }).notNull(),
+    sourceExamYear: int("sourceExamYear").notNull(),
     proposedTitle: varchar("proposedTitle", { length: 220 }).notNull(),
     sourceSummary: text("sourceSummary").notNull(),
     plannedAdaptation: text("plannedAdaptation").notNull(),

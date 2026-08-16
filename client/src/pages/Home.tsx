@@ -1,4 +1,5 @@
 import { PlatformHeader } from "@/components/PlatformHeader";
+import { TutorTelegramBanner } from "@/components/TutorTelegramBanner";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, BookOpenCheck, ClipboardList, Sparkles } from "lucide-react";
 import { Link } from "wouter";
@@ -28,6 +29,7 @@ export default function Home() {
             </div>
           </div>
         </section>
+        <section className="container py-8 sm:py-12"><TutorTelegramBanner /></section>
       </main>
     </div>
   );

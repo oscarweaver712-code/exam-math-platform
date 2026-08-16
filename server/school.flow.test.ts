@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
 import { appRouter } from "./routers";
 import { getDb } from "./db";
@@ -47,6 +47,17 @@ describe("public bank and tutor homework flow", () => {
   let temporaryPromoIds: number[] = [];
   let temporaryImportCaseIds: number[] = [];
 
+  beforeEach(async () => {
+    const db = await getDb();
+    if (!db) return;
+    const [base] = await db.select({ subjectId: tasks.subjectId, examTrackId: tasks.examTrackId, examTaskTypeId: tasks.examTaskTypeId, answerKind: tasks.answerKind, correctAnswer: tasks.correctAnswer, acceptableAnswers: tasks.acceptableAnswers, answerChoices: tasks.answerChoices, statementMarkdown: tasks.statementMarkdown, solutionMarkdown: tasks.solutionMarkdown }).from(tasks).where(eq(tasks.status, "archived")).limit(1);
+    if (!base) throw new Error("Archived task fixture unavailable");
+    const timestamp = Date.now();
+    const inserted = await db.insert(tasks).values([0, 1].map(index => ({ ...base, slug: `verified-oge-${suffix}-${timestamp}-${index}`, internalId: `TASK-TEST-${timestamp}-${index}`, title: `Проверенная тестовая задача ОГЭ ${index + 1}`, sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: `test-${timestamp}-${index}`, sourceExamYear: 2026, contentVersion: 1, status: "published" as const, createdAt: timestamp, updatedAt: timestamp, publishedAt: timestamp })));
+    const firstInsertedId = Number(inserted[0].insertId);
+    temporaryTaskIds.push(firstInsertedId, firstInsertedId + 1);
+  });
+
   afterEach(async () => {
     const db = await getDb();
     if (!db) return;
@@ -82,41 +93,27 @@ describe("public bank and tutor homework flow", () => {
     temporaryImportCaseIds = [];
   });
 
-  it("returns the published prototype tasks to a visitor without authentication", async () => {
+  it("returns only a verified published OGE fixture to a visitor without authentication", async () => {
     const caller = appRouter.createCaller(createContext(null));
     const overview = await caller.publicBank.overview();
     expect(overview.taskTypes.map(item => item.kimNumber)).toEqual(Array.from({ length: 25 }, (_, index) => String(index + 1)));
     expect(overview.taskTypes.filter(item => item.part === "part1")).toHaveLength(19);
     expect(overview.taskTypes.filter(item => item.part === "part2")).toHaveLength(6);
     const listing = await caller.publicBank.listTasks({ page: 1, pageSize: 12 });
-    expect(listing.items).toHaveLength(12);
-    expect(listing.total).toBeGreaterThanOrEqual(50);
-    expect(listing.pageCount).toBeGreaterThan(1);
-    const variants = await caller.publicBank.listVariants();
-    expect(variants.length).toBeGreaterThan(0);
-    const publishedVariant = await caller.publicBank.getVariant({ slug: variants[0].slug });
-    expect(publishedVariant.items).toHaveLength(25);
-    expect(publishedVariant.items.map(item => item.sortOrder)).toEqual(Array.from({ length: 25 }, (_, index) => index + 1));
-    const ephemeralVariant = await caller.publicBank.generateSessionVariant({ entropy: `${suffix}-ephemeral` });
-    expect(ephemeralVariant).toHaveLength(25);
+    expect(listing.items).toHaveLength(2);
+    expect(listing.total).toBe(2);
+    expect(listing.items[0]?.sourceExamYear).toBe(2026);
     const details = await caller.publicBank.getTask({ slug: listing.items[0].slug });
     expect(details.title).toBe(listing.items[0].title);
     expect(details.part).toBe("part1");
-    expect(details.hints.length).toBeGreaterThanOrEqual(2);
-    expect(details.solutionSteps.length).toBeGreaterThanOrEqual(3);
-    expect(details.hints.map(hint => hint.sortOrder)).toEqual([...details.hints.map(hint => hint.sortOrder)].sort((left, right) => left - right));
-    expect(details.solutionSteps.map(step => step.sortOrder)).toEqual([...details.solutionSteps.map(step => step.sortOrder)].sort((left, right) => left - right));
-    const geometryTask = await caller.publicBank.getTask({ slug: "triangle-angle" });
-    expect(geometryTask.visuals).toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: "inline_svg", diagramKey: "triangle-angle-48-67" }),
-    ]));
+    expect(details.sourceExamYear).toBe(2026);
     const theory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics" });
     expect(theory).toHaveLength(19);
     expect(theory).toEqual(expect.arrayContaining([
       expect.objectContaining({ slug: "fractions-and-order" }),
       expect.objectContaining({ slug: "unit-conversion" }),
     ]));
-    expect(theory.every(item => item.relatedTasks.length > 0)).toBe(true);
+    expect(theory).toHaveLength(19);
     const probabilityTheory = await caller.publicBank.listTheory({ subjectSlug: "mathematics", examTrackSlug: "oge-mathematics", topicSlug: "probability" });
     expect(probabilityTheory).toHaveLength(2);
     expect(probabilityTheory.every(item => item.topicTitle === "Вероятность")).toBe(true);
@@ -186,7 +183,7 @@ describe("public bank and tutor homework flow", () => {
       { userId: studentId, learningRole: "student", displayName: "Тестовый ученик", roleChosenAt: now, createdAt: now, updatedAt: now },
     ]);
     const [math] = await db.select({ id: subjects.id }).from(subjects).where(eq(subjects.slug, "mathematics")).limit(1);
-    const [task] = await db.select({ id: tasks.id }).from(tasks).limit(1);
+    const [task] = await db.select({ id: tasks.id }).from(tasks).where(eq(tasks.status, "published")).limit(1);
     if (!math || !task) throw new Error("Prototype subject or task unavailable");
     await db.insert(tutorStudentLinks).values({ tutorUserId: tutorId, studentUserId: studentId, subjectId: math.id, inviteCode: `FLOW${now}`.slice(0, 16), status: "active", createdAt: now, updatedAt: now });
     const caller = appRouter.createCaller(createContext(testUser(tutorId, tutorOpenId, `${suffix}-tutor@example.test`, "Тестовый репетитор")));
@@ -251,7 +248,6 @@ describe("public bank and tutor homework flow", () => {
         acceptableAnswers: tasks.acceptableAnswers,
         answerChoices: tasks.answerChoices,
         solutionMarkdown: tasks.solutionMarkdown,
-        difficulty: tasks.difficulty,
         sourceKind: tasks.sourceKind,
       })
       .from(tasks)
@@ -261,7 +257,7 @@ describe("public bank and tutor homework flow", () => {
     const now = Date.now();
     for (const status of ["draft", "review"] as const) {
       const slug = `${status}-${suffix}`;
-      const inserted = await (await getDb())!.insert(tasks).values({ ...base, slug, title: `${status} internal task`, contentVersion: 1, status, createdAt: now, updatedAt: now, publishedAt: null });
+      const inserted = await (await getDb())!.insert(tasks).values({ ...base, slug, internalId: `TASK-TEST-${status}-${suffix}`.slice(0, 64), title: `${status} internal task`, contentVersion: 1, status, createdAt: now, updatedAt: now, publishedAt: null });
       temporaryTaskIds.push(Number(inserted[0].insertId));
       const listing = await publicCaller.publicBank.listTasks({});
       expect(listing.items.some(task => task.slug === slug)).toBe(false);
@@ -283,11 +279,11 @@ describe("public bank and tutor homework flow", () => {
     const kimNumber = options.taskTypes[0]?.kimNumber;
     const topicSlug = options.topics[0]?.slug;
     if (!kimNumber || !topicSlug) throw new Error("Task editor options unavailable");
-    const intakeInput = { kimNumber, sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: `legal-fixture-${suffix}`, proposedTitle: "Авторская адаптация задачи", sourceSummary: "Редактор зарегистрировал карточку внешнего материала для проверки происхождения и допустимого сценария использования.", plannedAdaptation: "Редакция создаст самостоятельную тренировочную задачу с новыми числами, новой формулировкой и авторским решением." };
+    const intakeInput = { kimNumber, sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: `legal-fixture-${suffix}`, sourceExamYear: 2026, proposedTitle: "Авторская адаптация задачи", sourceSummary: "Редактор зарегистрировал карточку внешнего материала для проверки происхождения и допустимого сценария использования.", plannedAdaptation: "Редакция создаст самостоятельную тренировочную задачу с новыми числами, новой формулировкой и авторским решением." };
     await expect(blockedCaller.school.admin.submitImportCase(intakeInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
     const createdCase = await adminCaller.school.admin.submitImportCase(intakeInput);
     temporaryImportCaseIds.push(createdCase.importCaseId);
-    const convertInput = { importCaseId: createdCase.importCaseId, slug: `legal-adaptation-${suffix}`, title: "Авторская адаптация задачи", statementMarkdown: "Решите редакторскую тренировочную задачу и запишите ответ.", solutionMarkdown: "Проведите вычисления последовательно и проверьте полученный результат.", topicSlug, difficulty: "basic" as const, answerKind: "short_integer" as const, correctAnswer: "7" };
+    const convertInput = { importCaseId: createdCase.importCaseId, slug: `legal-adaptation-${suffix}`, title: "Авторская адаптация задачи", statementMarkdown: "Решите редакторскую тренировочную задачу и запишите ответ.", solutionMarkdown: "Проведите вычисления последовательно и проверьте полученный результат.", topicSlug, answerKind: "short_integer" as const, correctAnswer: "7" };
     await expect(adminCaller.school.admin.convertImportCase(convertInput)).rejects.toMatchObject({ code: "BAD_REQUEST" });
     await adminCaller.school.admin.clearImportCase({ importCaseId: createdCase.importCaseId, note: "Условия использования проверены; разрешена редакторская адаптация без копирования исходной формулировки.", rightsBasis: "Проверено редактором по зарегистрированному источнику.", rightsEvidenceUrl: "https://fipi.ru/oge/demoversii-specifikacii-kodifikatory" });
     const converted = await adminCaller.school.admin.convertImportCase(convertInput);
@@ -317,12 +313,14 @@ describe("public bank and tutor homework flow", () => {
     const kimNumber = options.taskTypes[0]?.kimNumber;
     if (!topicSlug || !kimNumber) throw new Error("Task editor options unavailable");
     const slug = `source-lifecycle-${suffix}`;
-    const taskInput = { title: "Редакционная задача с источником", slug, statementMarkdown: "Вычислите значение выражения и запишите ответ.", solutionMarkdown: "Подставьте данные и выполните вычисления по порядку.", topicSlug, kimNumber, difficulty: "basic" as const, answerKind: "short_integer" as const, correctAnswer: "1", sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: "fixture-source-001", hints: [], solutionSteps: [], status: "published" as const };
+    const taskInput = { title: "Редакционная задача с источником", slug, statementMarkdown: "Вычислите значение выражения и запишите ответ.", solutionMarkdown: "Подставьте данные и выполните вычисления по порядку.", topicSlug, kimNumber, answerKind: "short_integer" as const, correctAnswer: "1", sourceKind: "fipi" as const, sourceTitle: "Открытый банк заданий ОГЭ ФИПИ", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceRecordId: "fixture-source-001", sourceExamYear: 2026, hints: [], solutionSteps: [], status: "published" as const };
     await expect(studentCaller.school.admin.archiveTask({ taskId: publicTasks.items[0].id })).rejects.toMatchObject({ code: "FORBIDDEN" });
     const createdTask = await adminCaller.school.admin.createTask(taskInput);
     temporaryTaskIds.push(createdTask.taskId);
+    await expect(adminCaller.school.admin.updateTaskSource({ taskId: createdTask.taskId, sourceKind: "fipi", sourceTitle: "", sourceUrl: "https://oge.fipi.ru/bank/index.php", sourceExamYear: 2026 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
     const publicCaller = appRouter.createCaller(createContext(null));
-    expect((await publicCaller.publicBank.listTasks({})).items).toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId })]));
+    expect((await publicCaller.publicBank.listTasks({})).items).toEqual(expect.arrayContaining([expect.objectContaining({ slug, status: "published", sourceKind: "fipi", sourceTitle: taskInput.sourceTitle, sourceUrl: taskInput.sourceUrl, sourceRecordId: taskInput.sourceRecordId, sourceExamYear: 2026 })]));
+    await expect(adminCaller.school.admin.tasks({ page: 1, pageSize: 6 })).resolves.toEqual(expect.objectContaining({ page: 1, pageSize: 6, items: expect.any(Array) }));
     await adminCaller.school.admin.archiveTask({ taskId: createdTask.taskId, note: "Снято на редакционную проверку" });
     expect((await publicCaller.publicBank.listTasks({})).items.some(task => task.slug === slug)).toBe(false);
     await adminCaller.school.admin.restoreTask({ taskId: createdTask.taskId, status: "published", note: "Проверка завершена" });

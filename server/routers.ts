@@ -184,11 +184,11 @@ export const appRouter = router({
           title: tasks.title,
           statementMarkdown: tasks.statementMarkdown,
           status: tasks.status,
-          difficulty: tasks.difficulty,
           sourceKind: tasks.sourceKind,
           sourceTitle: tasks.sourceTitle,
           sourceUrl: tasks.sourceUrl,
           sourceRecordId: tasks.sourceRecordId,
+          sourceExamYear: tasks.sourceExamYear,
           kimNumber: examTaskTypes.kimNumber,
           part: examTaskTypes.part,
           taskType: examTaskTypes.title,
@@ -221,11 +221,11 @@ export const appRouter = router({
           answerChoices: tasks.answerChoices,
           answerKind: tasks.answerKind,
           solutionMarkdown: tasks.solutionMarkdown,
-          difficulty: tasks.difficulty,
           sourceKind: tasks.sourceKind,
           sourceTitle: tasks.sourceTitle,
           sourceUrl: tasks.sourceUrl,
           sourceRecordId: tasks.sourceRecordId,
+          sourceExamYear: tasks.sourceExamYear,
           kimNumber: examTaskTypes.kimNumber,
           part: examTaskTypes.part,
           taskType: examTaskTypes.title,
@@ -461,7 +461,7 @@ export const appRouter = router({
         .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
         .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
         .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
-        .where(and(eq(tasks.examTrackId, track.id), eq(tasks.status, "published"), eq(tasks.difficulty, "basic")))
+        .where(and(eq(tasks.examTrackId, track.id), eq(tasks.status, "published")))
         .orderBy(asc(examTaskTypes.sortOrder))
         .limit(5);
       return { source: "starter" as const, tasks: starter };
