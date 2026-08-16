@@ -9,6 +9,7 @@ export default function Home() {
     <div className="theme-page min-h-screen">
       <PlatformHeader />
       <main>
+        <section className="container py-5 sm:py-7"><TutorTelegramBanner /></section>
         <section className="obsidian-grid relative overflow-hidden border-b border-white/10">
           <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_28%,rgba(255,91,20,.23),transparent_28%),radial-gradient(circle_at_12%_85%,rgba(255,148,86,.08),transparent_30%)]" />
           <div className="container relative grid min-h-[620px] items-center gap-10 py-14 lg:grid-cols-[1.15fr_.85fr] lg:py-24">
@@ -29,7 +30,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-        <section className="container py-8 sm:py-12"><TutorTelegramBanner /></section>
       </main>
     </div>
   );
