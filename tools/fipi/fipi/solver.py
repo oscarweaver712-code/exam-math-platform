@@ -21,15 +21,17 @@ from fractions import Fraction
 
 #: `Найдите значение выражения $…$` — optionally with a substitution.
 VALUE_RE = re.compile(
-    r"Найдите\s+значение\s+выражения\s*\$(?P<expr>.+?)\$\s*(?:при\s+(?P<subs>[^.]+))?\.",
+    r"Найдите\s+значение\s+выражени[ея]\s*\$(?P<expr>.+?)\$\s*(?:при\s+(?P<subs>[^.]+))?\.",
     re.IGNORECASE | re.DOTALL,
 )
 #: The same task without math delimiters: «Найдите значение выражения 6,9+7,4.»
 PLAIN_VALUE_RE = re.compile(
-    r"Найдите\s+значение\s+выражения\s*(?P<expr>[\d\s.,:+\-*/()·−]+?)\s*\.\s*$",
+    r"Найдите\s+значение\s+выражени[ея]\s*(?P<expr>[\d\s.,:+\-*/()·−]+?)\s*\.\s*$",
     re.IGNORECASE,
 )
-SUBST_RE = re.compile(r"\$?(?P<name>[a-zA-Zа-яА-Я])\$?\s*=\s*\$?(?P<value>-?[\d.,]+)\$?")
+#: `при $a=3\frac{3}{7}$ и $b=\frac{1}{7}$` — a substituted value is itself
+#: LaTeX, not just digits, so it is evaluated rather than read.
+SUBST_RE = re.compile(r"(?P<name>[a-zA-Zа-яА-Я])\s*=\s*(?P<value>[^$,]+?)(?=\s*(?:\$|,|\sи\s|$))")
 
 
 class SolveError(ValueError):
@@ -65,7 +67,14 @@ def _expand_commands(text: str) -> str:
             index += len("\\frac") if text.startswith("\\frac", index) else len("\\dfrac")
             numerator, index = _read_group(text, index)
             denominator, index = _read_group(text, index)
-            out.append(f"(({_expand_commands(numerator)})/({_expand_commands(denominator)}))")
+            fraction = f"(({_expand_commands(numerator)})/({_expand_commands(denominator)}))"
+            # `3\frac{3}{7}` is три целых три седьмых — an addition, not a
+            # product. Reading it as multiplication turns 24/7 into 9/7, and
+            # the whole «при $a=3\frac{3}{7}$» family answers wrong.
+            whole = ""
+            while out and out[-1].isdigit():
+                whole = out.pop() + whole
+            out.append(f"(({whole})+{fraction})" if whole else fraction)
         elif text.startswith("\\sqrt", index):
             index += 5
             degree = None
@@ -103,6 +112,18 @@ def _latex_to_python(latex: str) -> str:
     # Remaining braces are grouping.
     text = text.replace("{", "(").replace("}", ")")
 
+    # Juxtaposed variables: `8ab` is 8·a·b. This has to run before the
+    # digit-letter rule below, whose `(?!\w)` guard refuses `8a` while a `b`
+    # still follows it. `_sqrt` is hidden meanwhile — it is a function name,
+    # not five variables multiplied together.
+    letter = r"[a-zA-Z\u0430-\u044f\u0410-\u042f]"
+    guarded = text.replace("_sqrt", "\x02")
+    previous = None
+    while previous != guarded:
+        previous = guarded
+        guarded = re.sub(rf"({letter})\s*({letter})", r"\1*\2", guarded)
+    text = guarded.replace("\x02", "_sqrt")
+
     # Implicit multiplication: 2(x+1), (a)(b), 3a, 6\sqrt{11}.
     text = re.sub(r"(\d)\s*\(", r"\1*(", text)
     text = re.sub(r"\)\s*\(", r")*(", text)
@@ -136,7 +157,9 @@ def _evaluate(expression: str, variables: dict[str, float]) -> float | Fraction:
         "__builtins__": {},
     }
     for name, value in variables.items():
-        scope[name] = Fraction(str(value))
+        # A substituted value may already be exact (a mixed number) or a float
+        # (a square root); keep whichever it is rather than round-tripping it.
+        scope[name] = value if isinstance(value, (Fraction, float, int)) else Fraction(str(value))
     try:
         return eval(prepared, scope)  # noqa: S307 - input is our own translation
     except Exception as error:  # noqa: BLE001
@@ -162,13 +185,13 @@ def solve_statement(statement: str) -> str | None:
     if not match:
         return None
 
-    variables: dict[str, float] = {}
+    variables: dict[str, float | Fraction] = {}
     if match.groupdict().get("subs"):
         for found in SUBST_RE.finditer(match.group("subs")):
-            raw = found.group("value").replace(",", ".").rstrip(".")
+            raw = found.group("value").strip().rstrip(".")
             try:
-                variables[found.group("name")] = float(raw)
-            except ValueError:
+                variables[found.group("name")] = _evaluate(_latex_to_python(raw), {})
+            except (SolveError, ValueError, TypeError, ZeroDivisionError):
                 return None
 
     try:

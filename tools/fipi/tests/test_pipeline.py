@@ -21,6 +21,7 @@ from fipi.parse import parse_page, to_text  # noqa: E402
 from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
 from fipi.geometry import solve_geometry  # noqa: E402
+from fipi.physics import solve_physics  # noqa: E402
 from fipi.probability import solve_probability  # noqa: E402
 from fipi.sequences import solve_sequence  # noqa: E402
 from fipi.solver import format_answer, solve_statement  # noqa: E402
@@ -485,6 +486,35 @@ class ClassifyTests(unittest.TestCase):
         self.assertIsNone(verdict.number)
 
 
+class TranscribedPictureTests(unittest.TestCase):
+    """What ФИПИ drew instead of writing, read once into `inline_math.json`."""
+
+    def test_a_drawn_equation_is_solved_not_looked_up(self) -> None:
+        # The transcription carries the equation; the root is still computed,
+        # so a misread digit costs a rejected candidate rather than a wrong key.
+        self.assertEqual(
+            solve_equation("Решите уравнение .", "D6F84B"),  # 7x-7=19+5x
+            "13",
+        )
+        self.assertIsNone(solve_equation("Решите уравнение ."))
+
+    def test_a_euler_diagram_is_four_weights_and_an_event(self) -> None:
+        statement = ("На рисунке изображена диаграмма Эйлера для случайных событий и в "
+                     "некотором случайном опыте. Найдите вероятность события .")
+        # regions 1,3,4,2 with the event «not (A or B)» — only the outside dot.
+        self.assertEqual(solve_probability(statement, "D1E728"), "0.1")
+        # The same diagram, the union instead.
+        self.assertEqual(solve_probability(statement, "9140A5"), "0.9")
+
+    def test_a_tree_reduces_to_the_same_four_regions(self) -> None:
+        statement = "На рисунке изображено дерево случайного опыта. Найдите вероятность события ."
+        # P(A)=0,25, P(B|A)=0,375, P(B|Ā)=0,875 → P(B) = 0,09375 + 0,65625.
+        self.assertEqual(solve_probability(statement, "3E7FF9"), "0.75")
+
+    def test_an_unknown_task_gets_nothing_from_the_table(self) -> None:
+        self.assertIsNone(solve_probability("Найдите вероятность события .", "НЕТТАКОГО"))
+
+
 class SequenceTests(unittest.TestCase):
     """Task 14 tells a story and leaves the progression to the reader."""
 
@@ -529,6 +559,22 @@ class SequenceTests(unittest.TestCase):
 
     def test_a_story_it_does_not_know_is_left_alone(self) -> None:
         self.assertIsNone(solve_sequence("В корзине лежат яблоки. Сколько их?"))
+
+
+class PhysicsTests(unittest.TestCase):
+    """Task 12 families whose formula is a picture but whose name is not."""
+
+    def test_kinetic_energy_from_the_name_of_the_quantity(self) -> None:
+        self.assertEqual(
+            solve_physics("Кинетическая энергия тела массой кг, двигающегося со скоростью , "
+                          "вычисляется по формуле и измеряется в джоулях (Дж). Известно, что "
+                          "автомобиль массой 2000 кг обладает кинетической энергией 289 тысяч "
+                          "джоулей. Найдите скорость этого автомобиля в метрах в секунду."),
+            "17",
+        )
+
+    def test_thousands_are_not_read_as_units(self) -> None:
+        self.assertIsNone(solve_physics("Кинетическая энергия. Найдите скорость."))
 
 
 class GeometryTests(unittest.TestCase):

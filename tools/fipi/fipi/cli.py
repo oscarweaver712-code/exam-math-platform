@@ -23,6 +23,7 @@ from .parse import parse_group_intro, parse_page
 from .equations import solve_equation
 from .formulas import solve_formula
 from .geometry import solve_geometry
+from .physics import solve_physics
 from .probability import solve_probability
 from .sequences import solve_sequence
 from .solver import answer_variants, bounded_candidates, solve_statement
@@ -202,11 +203,12 @@ def cmd_solve(args: argparse.Namespace) -> None:
         if task["answer_kind"] == "short":
             answer = (
                 solve_statement(task["statement_text"])
-                or solve_probability(task["statement_text"])
-                or solve_equation(task["statement_text"])
+                or solve_probability(task["statement_text"], task["short_id"])
+                or solve_equation(task["statement_text"], task["short_id"])
                 or solve_formula(task["statement_text"])
                 or solve_geometry(task["statement_text"], task["short_id"])
-                or solve_sequence(task["statement_text"])
+                or solve_sequence(task["statement_text"], task["short_id"])
+                or solve_physics(task["statement_text"])
             )
             if answer is not None:
                 candidates.append((task, answer_variants(answer)))

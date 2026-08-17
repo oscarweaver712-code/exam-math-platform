@@ -23,10 +23,8 @@ Standard library only, like the rest of the tool.
 
 from __future__ import annotations
 
-import json
 import math
 import re
-from pathlib import Path
 
 from .solver import format_answer
 
@@ -644,18 +642,7 @@ RULES: list[tuple[re.Pattern, object]] = [
 #: affected were read off their own images once and written down in
 #: `data/inline_math.json`, keyed by short id. The confirmation step is
 #: unchanged: a misread value costs a rejected candidate, not a wrong key.
-INLINE_MATH_PATH = Path(__file__).resolve().parent.parent / "data" / "inline_math.json"
-
-
-def _load_inline_math() -> dict[str, dict[str, str]]:
-    if not INLINE_MATH_PATH.exists():
-        return {}
-    with INLINE_MATH_PATH.open(encoding="utf-8") as handle:
-        table = json.load(handle)
-    return {key: value for key, value in table.items() if isinstance(value, dict)}
-
-
-INLINE_MATH = _load_inline_math()
+from .inline import TABLE as INLINE_MATH
 
 #: `(broken statement, handler)`. The handler receives the match on the
 #: hole-ridden text plus the transcribed values for that task.

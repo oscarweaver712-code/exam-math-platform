@@ -15,6 +15,7 @@ import math
 import re
 from fractions import Fraction
 
+from .inline import values as inline_values
 from .solver import SolveError, _evaluate, _latex_to_python, format_answer
 
 EQUATION_RE = re.compile(
@@ -68,11 +69,19 @@ def _roots(a: Fraction, b: Fraction, c: Fraction) -> list[Fraction]:
     return sorted({(-b - root) / (2 * a), (-b + root) / (2 * a)})
 
 
-def solve_equation(statement: str) -> str | None:
+def solve_equation(statement: str, short_id: str = "") -> str | None:
     """Requested root of the stated equation, or None when it is out of scope."""
-    match = EQUATION_RE.search(" ".join(statement.split()))
+    text = " ".join(statement.split())
+    match = EQUATION_RE.search(text)
     if not match:
-        return None
+        # «Решите уравнение .» — ФИПИ drew the equation instead of writing it,
+        # so it comes from the transcription and is then solved as usual.
+        drawn = inline_values(short_id).get("equation")
+        if not drawn:
+            return None
+        match = EQUATION_RE.search(f"Решите уравнение ${drawn}$")
+        if not match:
+            return None
 
     body = match.group("body")
     if body.count("=") != 1:

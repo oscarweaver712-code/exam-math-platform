@@ -24,6 +24,7 @@ from __future__ import annotations
 import math
 import re
 
+from .inline import values as inline_values
 from .solver import format_answer
 
 #: Row and jump indices are spelled out: «в десятом ряду», «в первом ряду».
@@ -191,12 +192,31 @@ def _bouncing(text: str) -> float | None:
     return None
 
 
+def _cooling(text: str, values: dict[str, str]) -> float | None:
+    """«каждую минуту температура уменьшалась на … начальная составляла …»
+
+    Both temperatures are pictures, so they come from the transcription. The
+    answer here is the one in this family that can legitimately be negative:
+    the substance starts below zero and goes colder.
+    """
+    if "равномерно охлаждали" not in text:
+        return None
+    minutes = re.search(rf"через\s+{NUM}\s+минут", text)
+    if not minutes or "rate" not in values or "start" not in values:
+        return None
+    return _num(values["start"]) - _num(values["rate"]) * _num(minutes.group(1))
+
+
 RULES = (_moving_body, _multiplying, _amphitheatre, _bouncing)
 
 
-def solve_sequence(statement: str) -> str | None:
+def solve_sequence(statement: str, short_id: str = "") -> str | None:
     """Answer for one task 14, or None when no story matches."""
     text = _flatten(statement)
+
+    chilled = _cooling(text, inline_values(short_id))
+    if chilled is not None and math.isfinite(chilled):
+        return format_answer(round(chilled, 6))
     for rule in RULES:
         try:
             value = rule(text)

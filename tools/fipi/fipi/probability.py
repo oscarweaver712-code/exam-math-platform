@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from fractions import Fraction
 
+from .inline import values as inline_values
+
 NUM = r"(\d+(?:[.,]\d+)?)"
 
 
@@ -180,6 +182,64 @@ def _puzzles(text: str) -> Fraction | None:
     return wanted / total if total else None
 
 
+def _counted_outcomes(values: dict[str, str]) -> Fraction | None:
+    """«В случайном опыте N равновозможных событий, из которых K благоприятны»
+
+    Both counts are pictures rather than text, so they come from the
+    transcription; the division is still done here.
+    """
+    if "outcomes" not in values or "favourable" not in values:
+        return None
+    total = Fraction(values["outcomes"])
+    return Fraction(values["favourable"]) / total if total else None
+
+
+#: Only these characters may appear in a transcribed event expression.
+_EVENT_OK = set("AB adnotr()| ")
+
+
+def _euler(values: dict[str, str]) -> Fraction | None:
+    """A Euler diagram, read once into four region weights.
+
+    The picture carries everything: how many outcomes lie outside both events,
+    in A alone, in B alone and in the overlap. Those four numbers and the asked
+    event — itself a picture, `\overline{A}\cup B` — are transcribed; the
+    probability is still worked out here, so a misread costs a candidate.
+    """
+    if "event" not in values:
+        return None
+    if "tree" in values:
+        # A probability tree says the same thing in another shape: P(A) and the
+        # two conditional probabilities of B multiply out into the very same
+        # four regions, so one evaluator serves both pictures.
+        chance_a, given_a, given_not_a = (Fraction(part) for part in values["tree"].split(","))
+        chance_not_a = 1 - chance_a
+        weights = [
+            chance_not_a * (1 - given_not_a), chance_a * (1 - given_a),
+            chance_not_a * given_not_a, chance_a * given_a,
+        ]
+    elif "regions" in values:
+        weights = [Fraction(part) for part in values["regions"].split(",")]
+    else:
+        return None
+    if len(weights) != 4:
+        return None
+    event = values["event"]
+    if set(event) - _EVENT_OK:
+        return None
+
+    outside, only_a, only_b, both = weights
+    total = outside + only_a + only_b + both
+    favourable = Fraction(0)
+    for weight, in_a, in_b in (
+        (outside, False, False), (only_a, True, False),
+        (only_b, False, True), (both, True, True),
+    ):
+        if eval(event, {"__builtins__": {}}, {"A": in_a, "B": in_b}):  # noqa: S307
+            favourable += weight
+    return favourable / total if total else None
+
+
 def _dice_sum(text: str) -> Fraction | None:
     """«сумма выпавших очков равна 3, 4 или 5» — 36 outcomes, counted."""
     if "кубик" not in text.lower():
@@ -213,9 +273,14 @@ _RULES: list[tuple[re.Pattern[str], object]] = [
 ]
 
 
-def solve_probability(statement: str) -> str | None:
+def solve_probability(statement: str, short_id: str = "") -> str | None:
     """Probability for the templated shapes, or None when the shape is new."""
     text = " ".join(statement.split())
+
+    transcribed = inline_values(short_id)
+    for read in (_counted_outcomes(transcribed), _euler(transcribed)):
+        if read is not None and 0 <= read <= 1 and _terminating(read):
+            return _format(read)
 
     pens = _pens(text)
     if pens is not None:
