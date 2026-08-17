@@ -22,6 +22,7 @@ from .fetch import FipiClient, download_image
 from .parse import parse_group_intro, parse_page
 from .equations import solve_equation
 from .formulas import solve_formula
+from .geometry import solve_geometry
 from .probability import solve_probability
 from .solver import answer_variants, bounded_candidates, solve_statement
 
@@ -30,6 +31,7 @@ CACHE = ROOT / "cache"
 OUT = ROOT / "out"
 TASKS_PATH = OUT / "tasks.jsonl"
 ANSWERS_PATH = OUT / "answers.jsonl"
+REJECTED_PATH = OUT / "rejected.jsonl"
 GROUPS_PATH = OUT / "groups.jsonl"
 IMAGES_DIR = OUT / "images"
 
@@ -202,6 +204,7 @@ def cmd_solve(args: argparse.Namespace) -> None:
                 or solve_probability(task["statement_text"])
                 or solve_equation(task["statement_text"])
                 or solve_formula(task["statement_text"])
+                or solve_geometry(task["statement_text"], task["short_id"])
             )
             if answer is not None:
                 candidates.append((task, answer_variants(answer)))
@@ -212,8 +215,6 @@ def cmd_solve(args: argparse.Namespace) -> None:
         if options:
             candidates.append((task, options))
 
-    if args.limit:
-        candidates = candidates[: args.limit]
     print(f"вычислено кандидатов: {len(candidates)}")
 
     known: dict[str, str] = {}
@@ -225,22 +226,57 @@ def cmd_solve(args: argparse.Namespace) -> None:
                     known[record["guid"]] = record["answer"]
         print(f"уже подтверждено ранее: {len(known)}")
 
+    # A candidate ФИПИ has already turned down will be turned down again, so
+    # asking a second time is pure load on their host. A candidate is only
+    # skipped when the solver still proposes the very same answers — improve a
+    # solver and its tasks come back into the batch by themselves.
+    refused: set[tuple[str, str]] = set()
+    if REJECTED_PATH.exists() and not args.refresh:
+        with REJECTED_PATH.open(encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    record = json.loads(line)
+                    refused.add((record["guid"], record["answer"]))
+        print(f"отклонено ранее: {len(refused)}")
+
+    # `--limit` counts what will actually be sent, so a small pilot batch stays
+    # small even when most candidates are already confirmed.
+    pending = [
+        (task, answer)
+        for task, answer in candidates
+        if task["guid"] not in known and (task["guid"], "|".join(answer)) not in refused
+    ]
+    if args.limit:
+        pending = pending[: args.limit]
+    if args.dry_run:
+        # Nothing leaves the machine: this is the sanity pass before a batch.
+        by_number: Counter[object] = Counter(task["oge_number"] for task, _ in pending)
+        print(f"к отправке: {len(pending)}")
+        for number, count in sorted(by_number.items(), key=lambda item: (item[0] is None, item[0])):
+            print(f"  №{number}  {count}")
+        for task, answer in pending[:10]:
+            print(f"  {task['short_id']} -> {answer[0]}")
+        return
+
     settings = _settings(args)
     client = FipiClient(settings, CACHE)
     confirmed = rejected = unclear = 0
 
-    with ANSWERS_PATH.open("a" if known else "w", encoding="utf-8") as handle:
-        for index, (task, answer) in enumerate(candidates, start=1):
-            if task["guid"] in known:
-                continue
+    with ANSWERS_PATH.open("a" if known else "w", encoding="utf-8") as handle, \
+            REJECTED_PATH.open("a" if refused else "w", encoding="utf-8") as refusals:
+        for index, (task, answer) in enumerate(pending, start=1):
             accepted = None
+            answered = True
             for variant in answer:
                 verdict = client.check_answer(task["guid"], variant)
                 if verdict is True:
                     accepted = variant
                     break
                 if verdict is None:
+                    # A transport hiccup is not a verdict — leave the candidate
+                    # alone so the next run asks again.
                     unclear += 1
+                    answered = False
                     break
                 time.sleep(args.delay)
 
@@ -254,10 +290,17 @@ def cmd_solve(args: argparse.Namespace) -> None:
                 confirmed += 1
             else:
                 rejected += 1
+                if answered:
+                    refusals.write(json.dumps({
+                        "guid": task["guid"],
+                        "short_id": task["short_id"],
+                        "answer": "|".join(answer),
+                    }, ensure_ascii=False) + "\n")
+                    refusals.flush()
 
             time.sleep(args.delay)
             if index % 25 == 0:
-                print(f"  {index}/{len(candidates)} — подтверждено {confirmed}", flush=True)
+                print(f"  {index}/{len(pending)} — подтверждено {confirmed}", flush=True)
 
     print(f"подтверждено {confirmed}, отклонено {rejected}, неясно {unclear} -> {ANSWERS_PATH}")
 
@@ -343,6 +386,7 @@ def build_parser() -> argparse.ArgumentParser:
     solve.add_argument("--limit", type=int)
     solve.add_argument("--refresh", action="store_true", help="ignore answers.jsonl and start over")
     solve.add_argument("--choices", action="store_true", help="also walk tasks whose form offers a finite set of answers")
+    solve.add_argument("--dry-run", action="store_true", help="show what would be sent, without contacting ФИПИ")
     solve.set_defaults(func=cmd_solve)
 
     stats = sub.add_parser("stats", help="classification report")

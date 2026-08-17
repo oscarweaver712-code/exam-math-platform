@@ -19,6 +19,7 @@ from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
 from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
+from fipi.geometry import solve_geometry  # noqa: E402
 from fipi.probability import solve_probability  # noqa: E402
 from fipi.solver import format_answer, solve_statement  # noqa: E402
 
@@ -393,6 +394,70 @@ class ClassifyTests(unittest.TestCase):
     def test_unknown_metadata_is_unresolved_not_guessed(self) -> None:
         verdict = classify("Некоторый текст без признаков.", "short", [])
         self.assertIsNone(verdict.number)
+
+
+class GeometryTests(unittest.TestCase):
+    def test_right_triangle_propagates_in_every_direction(self) -> None:
+        # The same family asks for a side from a ratio and a ratio from sides.
+        self.assertEqual(
+            solve_geometry("В треугольнике $ABC$ угол $C$ равен 90°, $AC=16$, $AB=40$. "
+                           "Найдите $\\sin B$."),
+            "0.4",
+        )
+        self.assertEqual(
+            solve_geometry("В треугольнике $ABC$ угол $C$ равен 90°, "
+                           "$\\sin B=\\frac{7}{12}$, $AB=48$. Найдите $AC$."),
+            "28",
+        )
+        self.assertEqual(
+            solve_geometry("В треугольнике $ABC$ угол $C$ равен 90°, "
+                           "$\\operatorname{tg} B=\\frac{3}{4}$, $BC=12$. Найдите $AC$."),
+            "9",
+        )
+
+    def test_a_surd_cancels_instead_of_drifting(self) -> None:
+        self.assertEqual(
+            solve_geometry("Сторона квадрата равна $11\\sqrt{2}$. Найдите диагональ "
+                           "этого квадрата."),
+            "22",
+        )
+
+    def test_red_herrings_are_ignored(self) -> None:
+        # The median's own length says nothing about the half it lands on.
+        self.assertEqual(
+            solve_geometry("В треугольнике $ABC$ известно, что $AC=54$, $BM$ — медиана, "
+                           "$BM=43$. Найдите $AM$."),
+            "27",
+        )
+
+    def test_which_lateral_side_the_diagonal_meets_changes_the_answer(self) -> None:
+        near = ("В равнобедренной трапеции с основаниями $AD$ и $BC$ угол $D$ равен 64°. "
+                "Диагональ $AC$ образует со стороной $AB$ угол 29°. Сколько градусов "
+                "составляет угол между этой диагональю и меньшим основанием трапеции?")
+        far = near.replace("стороной $AB$", "стороной $CD$")
+        self.assertEqual(solve_geometry(near), "35")
+        self.assertEqual(solve_geometry(far), "87")
+
+    def test_a_drawing_only_task_is_left_alone(self) -> None:
+        self.assertIsNone(solve_geometry(
+            "На клетчатой бумаге с размером клетки $1\\times 1$ изображён ромб. "
+            "Найдите площадь этого ромба."
+        ))
+
+    def test_a_ragged_value_is_not_worth_a_request(self) -> None:
+        # 7/12 of a right angle is not what an ОГЭ answer field expects; the
+        # family is real but this instance would only waste a check.
+        self.assertIsNone(solve_geometry(
+            "В треугольнике $ABC$ угол $C$ равен 90°, $AC=7$, $AB=12$. Найдите $\\sin B$."
+        ))
+
+    def test_math_drawn_as_a_picture_comes_from_the_transcription(self) -> None:
+        # ФИПИ rendered the radius as a GIF, so the statement itself has a hole.
+        broken = ("В окружность с центром в точке  вписан равносторонний треугольник. "
+                  "Расстояние от точки  до сторон треугольника равно . "
+                  "Найдите сторону треугольника.")
+        self.assertIsNone(solve_geometry(broken))
+        self.assertEqual(solve_geometry(broken, "CB2F35"), "24")
 
 
 if __name__ == "__main__":
