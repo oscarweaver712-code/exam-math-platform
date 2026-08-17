@@ -42,6 +42,17 @@ import { schoolRouter } from "./routers/school";
 /** Title the importer gives the text a group of questions shares. */
 const SHARED_INTRO_TITLE = "Общее условие";
 
+/**
+ * Whether a learner's answer may be sent to ФИПИ when the task has no key yet.
+ *
+ * From the host this runs on `oge.fipi.ru` is unreachable — the bank refuses
+ * foreign addresses — so asking it buys a twelve-second timeout and the same
+ * «проверить не удалось» every time, which reads to the learner as a broken
+ * button. Keys are filled in offline instead (`tools/fipi`, solve-then-verify)
+ * and checked locally. The flag exists for an environment that can reach ФИПИ.
+ */
+const LIVE_ORACLE = process.env.FIPI_ORACLE === "1";
+
 const publicFilters = z.object({
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
@@ -611,7 +622,7 @@ export const appRouter = router({
           .where(and(eq(tasks.id, input.taskId), eq(tasks.status, "published")))
           .limit(1);
         if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задание не найдено." });
-        if (!task.correctAnswer && task.part === "part1" && task.sourceKind === "fipi" && task.sourceRecordId) {
+        if (LIVE_ORACLE && !task.correctAnswer && task.part === "part1" && task.sourceKind === "fipi" && task.sourceRecordId) {
           // Imported ФИПИ tasks arrive without an answer key, so the first
           // checks go to the bank's own endpoint. A confirmed answer is written
           // back, and every later attempt is decided locally.
@@ -646,7 +657,16 @@ export const appRouter = router({
 
         if (!isPartOneAutoCheckEligible({ part: task.part, answerKind: task.answerKind, correctAnswer: task.correctAnswer }) || !task.correctAnswer) {
           await db.insert(taskAttempts).values({ userId: ctx.user.id, taskId: input.taskId, rawAnswer: input.rawAnswer, checkStatus: "awaiting_review", submittedAt: Date.now() });
-          return { checkStatus: "awaiting_review" as const, isCorrect: null, feedback: "Ответ сохранён и ожидает проверки преподавателя." };
+          // Say which of the two it is. A part 1 task without a key is not
+          // waiting for a teacher — it is waiting for us.
+          const keyless = task.part === "part1" && task.answerKind !== "manual";
+          return {
+            checkStatus: "awaiting_review" as const,
+            isCorrect: null,
+            feedback: keyless
+              ? "Ответ сохранён. У этого задания пока нет ключа — проверка появится позже."
+              : "Ответ сохранён и ожидает проверки преподавателя.",
+          };
         }
         const result = checkPartOneAnswer({ rawAnswer: input.rawAnswer, answerKind: task.answerKind, correctAnswer: task.correctAnswer, acceptableAnswers: task.acceptableAnswers ?? [] });
         await db.insert(taskAttempts).values({

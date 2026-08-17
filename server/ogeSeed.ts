@@ -255,10 +255,12 @@ async function ensureAuthorTaskExpansion(db: NonNullable<Awaited<ReturnType<type
     solutionMarkdown,
     sourceKind: "author" as const,
     contentVersion: 1,
-    status: "published" as const,
+    // Demo scaffolding, not exam content: it stays in the database for the
+    // editor to look at, but the public bank must not open with it.
+    status: "draft" as const,
     createdAt: timestamp,
     updatedAt: timestamp,
-    publishedAt: timestamp,
+    publishedAt: null,
   })));
   const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
@@ -299,10 +301,12 @@ async function ensureVerifiedOgeBatch(db: NonNullable<Awaited<ReturnType<typeof 
     sourceAccessedAt: timestamp,
     sourceExamYear,
     contentVersion: 1,
-    status: "published" as const,
+    // Demo scaffolding, not exam content: it stays in the database for the
+    // editor to look at, but the public bank must not open with it.
+    status: "draft" as const,
     createdAt: timestamp,
     updatedAt: timestamp,
-    publishedAt: timestamp,
+    publishedAt: null,
   })));
   const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
@@ -339,10 +343,12 @@ async function ensureAuthorTemplateSamples(db: NonNullable<Awaited<ReturnType<ty
     sourceAccessedAt: timestamp,
     sourceExamYear: 2026,
     contentVersion: 1,
-    status: "published" as const,
+    // Demo scaffolding, not exam content: it stays in the database for the
+    // editor to look at, but the public bank must not open with it.
+    status: "draft" as const,
     createdAt: timestamp,
     updatedAt: timestamp,
-    publishedAt: timestamp,
+    publishedAt: null,
   })));
   const taskRows = await db.select({ id: tasks.id, slug: tasks.slug }).from(tasks).where(eq(tasks.examTrackId, trackId));
   const taskIds = new Map(taskRows.map(row => [row.slug, row.id]));
