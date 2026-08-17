@@ -104,6 +104,20 @@ python3 run.py solve --choices   # ключи ответов, с подтвер�
 pnpm import:fipi -- --with-images
 ```
 
+Если поменялась только классификация, полный импорт запускать незачем: он
+переписывает условия и заново заливает схемы ради одной колонки. Точечный
+перенос задач по корзинам делает отдельный скрипт, тем же ключом:
+
+```bash
+railway volume files --volume school-911-volume upload --overwrite \
+  tools/db/apply-numbers.mjs /import/apply-numbers.mjs
+railway volume files --volume school-911-volume upload --overwrite \
+  tools/fipi/out/tasks.jsonl /import/out/tasks.jsonl
+railway ssh -- node /data/import/apply-numbers.mjs \
+  --tasks /data/import/out/tasks.jsonl --dry-run   # сначала посмотреть
+railway ssh -- node /data/import/apply-numbers.mjs --tasks /data/import/out/tasks.jsonl
+```
+
 Сборщик должен работать из сети, откуда виден `oge.fipi.ru`. С Railway он
 недоступен: сервера зарубежные, и соединение отваливается по таймауту.
 Подробности — в [tools/fipi/README.md](tools/fipi/README.md).

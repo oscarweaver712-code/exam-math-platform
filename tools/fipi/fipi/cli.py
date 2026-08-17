@@ -20,6 +20,7 @@ from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
 from .parse import parse_group_intro, parse_page
+from .practical import assign as assign_practical_numbers
 from .equations import solve_equation
 from .formulas import solve_formula
 from .geometry import solve_geometry
@@ -89,36 +90,46 @@ def cmd_build(args: argparse.Namespace) -> None:
                     groups[record["group_id"]] = record
 
     seen: set[str] = set()
-    written = 0
+    records: list[dict] = []
+
+    for index, path in enumerate(pages):
+        for task in parse_page(path.read_text(encoding="utf-8"), index):
+            if task.guid in seen:
+                continue
+            seen.add(task.guid)
+            verdict = classify(
+                task.statement_text, task.answer_kind, task.kes_codes, task.extra_cells
+            )
+            record = task.to_dict()
+            shared = groups.get(task.group_id or "")
+            if shared:
+                record["group_intro"] = shared["intro_text"]
+                record["group_images"] = shared["images"]
+                # The plan belongs to the statement as much as the question
+                # text does; without it the task cannot be answered.
+                record["images"] = sorted(set(record["images"]) | set(shared["images"]))
+                record["image_urls"] = [f"{HOST}/{p}" for p in record["images"]]
+            record["oge_number"] = verdict.number
+            record["classification"] = verdict.to_dict()
+            record.setdefault("image_urls", [f"{HOST}/{p}" for p in task.images])
+            records.append(record)
+
+    # The practical block can only be read as a whole: a question of the block
+    # says nothing about which of the five it is, but its place among its
+    # siblings does. This pass needs every record, so it runs after the loop.
+    placed = assign_practical_numbers(records)
+
     stats: Counter[str] = Counter()
-
     with TASKS_PATH.open("w", encoding="utf-8") as handle:
-        for index, path in enumerate(pages):
-            for task in parse_page(path.read_text(encoding="utf-8"), index):
-                if task.guid in seen:
-                    continue
-                seen.add(task.guid)
-                verdict = classify(
-                    task.statement_text, task.answer_kind, task.kes_codes, task.extra_cells
-                )
-                record = task.to_dict()
-                shared = groups.get(task.group_id or "")
-                if shared:
-                    record["group_intro"] = shared["intro_text"]
-                    record["group_images"] = shared["images"]
-                    # The plan belongs to the statement as much as the question
-                    # text does; without it the task cannot be answered.
-                    record["images"] = sorted(set(record["images"]) | set(shared["images"]))
-                    record["image_urls"] = [f"{HOST}/{p}" for p in record["images"]]
-                record["oge_number"] = verdict.number
-                record["oge_title"] = describe(verdict.number)
-                record["classification"] = verdict.to_dict()
-                record.setdefault("image_urls", [f"{HOST}/{p}" for p in task.images])
-                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
-                written += 1
-                stats[verdict.confidence] += 1
+        for record in records:
+            record["oge_title"] = describe(record["oge_number"])
+            stats[record["classification"]["confidence"]] += 1
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
+    written = len(records)
     print(f"{written} unique tasks -> {TASKS_PATH}")
+    if placed:
+        print(f"  практический блок: разложено по местам {placed}")
     for confidence in (CERTAIN, LIKELY, AMBIGUOUS, "unresolved"):
         count = stats[confidence]
         if count:

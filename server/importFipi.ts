@@ -45,6 +45,13 @@ const TRACK_SLUG = "oge-mathematics";
 
 /** Bucket for the flattened practical block: the bank does not say which of 1–5. */
 const PRACTICAL_BLOCK_KIM = "1–5";
+/**
+ * Bucket for the part 2 geometry pair. Positions 23 and 25 ask for the same
+ * thing — a length or an area, worked out and written down — and differ only in
+ * difficulty, which the bank does not publish. Putting these questions under a
+ * single number would be a coin toss printed as fact.
+ */
+const GEOMETRY_PAIR_KIM = "23/25";
 /** Bucket for everything the classifier could not resolve. */
 const UNSORTED_KIM = "0";
 
@@ -137,7 +144,10 @@ function kimNumberFor(task: ClassifiedTask): string {
   const candidates = task.classification.candidates ?? [];
   const isPracticalBlock =
     candidates.length === 5 && candidates.every((n, i) => n === i + 1);
-  return isPracticalBlock ? PRACTICAL_BLOCK_KIM : UNSORTED_KIM;
+  if (isPracticalBlock) return PRACTICAL_BLOCK_KIM;
+  const isGeometryPair =
+    candidates.length === 2 && candidates[0] === 23 && candidates[1] === 25;
+  return isGeometryPair ? GEOMETRY_PAIR_KIM : UNSORTED_KIM;
 }
 
 /**
@@ -163,8 +173,9 @@ async function ensureBuckets(
   trackId: number,
 ): Promise<void> {
   const extra = [
-    [PRACTICAL_BLOCK_KIM, "Практический блок: номер уточняется", 5],
-    [UNSORTED_KIM, "Требует разбора", 99],
+    [PRACTICAL_BLOCK_KIM, "Практический блок: номер уточняется", 5, "part1"],
+    [GEOMETRY_PAIR_KIM, "Геометрия: вычисление, №23 или №25", 25, "part2"],
+    [UNSORTED_KIM, "Требует разбора", 99, "part1"],
   ] as const;
 
   const present = await db
@@ -175,18 +186,25 @@ async function ensureBuckets(
 
   const timestamp = Date.now();
   const missing = extra.filter(([kimNumber]) => !known.has(kimNumber));
+  const description = (kimNumber: string) => {
+    if (kimNumber === PRACTICAL_BLOCK_KIM) {
+      return "Открытый банк ФИПИ хранит блок 1–5 расплющенным: пять вопросов лежат отдельными записями без связи между собой. Здесь остаётся то, что не удалось разложить по местам внутри группы.";
+    }
+    if (kimNumber === GEOMETRY_PAIR_KIM) {
+      return "Задания 23 и 25 — одна и та же геометрическая задача на вычисление, различающаяся только уровнем сложности, которого банк не публикует. Номер внутри пары поставит редактор.";
+    }
+    return "Классификатор не смог однозначно определить номер задания. Список кандидатов виден в редакторе.";
+  };
+
   if (missing.length) {
     await db.insert(examTaskTypes).values(
-      missing.map(([kimNumber, title, sortOrder]) => ({
+      missing.map(([kimNumber, title, sortOrder, part]) => ({
         examTrackId: trackId,
         kimNumber,
         title,
-        part: "part1" as const,
+        part,
         sortOrder,
-        description:
-          kimNumber === PRACTICAL_BLOCK_KIM
-            ? "Открытый банк ФИПИ хранит блок 1–5 расплющенным: пять вопросов лежат отдельными записями без связи между собой."
-            : "Классификатор не смог однозначно определить номер задания. Список кандидатов виден в редакторе.",
+        description: description(kimNumber),
         requiresVisual: false,
         isActive: true,
         createdAt: timestamp,
@@ -523,7 +541,13 @@ async function main() {
   console.log("\nПо номерам ОГЭ:");
   const ordered = Array.from(perKim.entries()).sort((a, b) => {
     const rank = (value: string) =>
-      value === PRACTICAL_BLOCK_KIM ? 5.5 : value === UNSORTED_KIM ? 100 : Number(value);
+      value === PRACTICAL_BLOCK_KIM
+        ? 5.5
+        : value === GEOMETRY_PAIR_KIM
+          ? 24.5
+          : value === UNSORTED_KIM
+            ? 100
+            : Number(value);
     return rank(a[0]) - rank(b[0]);
   });
   for (const [kimNumber, count] of ordered) {

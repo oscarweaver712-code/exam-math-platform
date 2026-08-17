@@ -160,10 +160,25 @@ export const appRouter = router({
         .from(theoryExamTracks)
         .innerJoin(theoryUnits, eq(theoryExamTracks.theoryUnitId, theoryUnits.id))
         .where(and(eq(theoryExamTracks.examTrackId, track.id), eq(theoryUnits.status, "published")));
+      // The count travels with the number so the picker can skip a position
+      // that holds nothing: «0 — требует разбора» is empty once everything is
+      // sorted, and 23 and 25 stand empty while the pair they share holds the
+      // questions. Every position is still returned — hiding is the caller's
+      // choice, and an admin screen wants the empty ones too.
       const taskTypes = await db
-        .select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title, part: examTaskTypes.part })
+        .select({
+          kimNumber: examTaskTypes.kimNumber,
+          title: examTaskTypes.title,
+          part: examTaskTypes.part,
+          taskCount: sql<number>`COUNT(${tasks.id})`,
+        })
         .from(examTaskTypes)
+        .leftJoin(
+          tasks,
+          and(eq(tasks.examTaskTypeId, examTaskTypes.id), eq(tasks.status, "published")),
+        )
         .where(eq(examTaskTypes.examTrackId, track.id))
+        .groupBy(examTaskTypes.id, examTaskTypes.kimNumber, examTaskTypes.title, examTaskTypes.part, examTaskTypes.sortOrder)
         .orderBy(asc(examTaskTypes.sortOrder));
       return { track, topics: topicRows, taskTypes, taskCount: taskRows.length, theoryCount: theoryRows.length };
     }),

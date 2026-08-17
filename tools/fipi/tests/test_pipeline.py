@@ -18,6 +18,7 @@ from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi import parse  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
+from fipi.practical import numbers_for_group  # noqa: E402
 from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
 from fipi.geometry import solve_geometry  # noqa: E402
@@ -481,9 +482,130 @@ class ClassifyTests(unittest.TestCase):
         self.assertIsNone(undecided.number)
         self.assertEqual(undecided.candidates, [23, 25])
 
+    def test_the_circle_decides_when_a_figure_is_drawn_inside_it(self) -> None:
+        # Both subthemes are tagged, so the vote ties; the bank's own answer to
+        # that tie is 16, whichever figure the circle is wrapped around.
+        trapezoid = classify(
+            "Угол $A$ трапеции $ABCD$, вписанной в окружность, равен 59°. Найдите угол $B$.",
+            "short",
+            ["7.3", "7.4", "7.5"],
+        )
+        self.assertEqual(trapezoid.number, 16)
+        triangle = classify(
+            "Сторона равностороннего треугольника равна $8\\sqrt{3}$. Найдите радиус описанной окружности.",
+            "short",
+            ["7.2", "7.4", "7.5"],
+        )
+        self.assertEqual(triangle.number, 16)
+
+    def test_without_a_circle_the_figure_itself_decides(self) -> None:
+        self.assertEqual(
+            classify(
+                "В равнобедренной трапеции известна высота, большее основание и угол при основании. Найдите меньшее основание.",
+                "short",
+                ["7.2", "7.3"],
+            ).number,
+            17,
+        )
+        self.assertEqual(
+            classify(
+                "В треугольнике $ABC$ известно, что $AB=12$, $BC=15$, $\\sin \\angle ABC=\\frac{4}{9}$. Найдите площадь треугольника.",
+                "short",
+                ["7.5"],
+            ).number,
+            15,
+        )
+
+    def test_the_number_line_is_position_7_however_it_is_asked(self) -> None:
+        self.assertEqual(classify("Между какими числами заключено число $\\sqrt{73}$?", "select_one", ["1.4", "2.5"]).number, 7)
+        self.assertEqual(
+            classify(
+                "На координатной прямой точки $A$, $B$, $C$ и $D$ соответствуют числам 0,0137; 0,103; 0,03; 0,021. Какой точке соответствует число 0,03?",
+                "select_one",
+                ["1.3", "6.1"],
+            ).number,
+            7,
+        )
+
+    def test_an_inequality_read_off_a_picture_is_still_position_13(self) -> None:
+        self.assertEqual(classify("Укажите неравенство, решение которого изображено на рисунке.", "select_one", ["3.2", "6.1"]).number, 13)
+
     def test_unknown_metadata_is_unresolved_not_guessed(self) -> None:
         verdict = classify("Некоторый текст без признаков.", "short", [])
         self.assertIsNone(verdict.number)
+
+
+class PracticalBlockTests(unittest.TestCase):
+    """Reading the 1–5 position out of the group ФИПИ flattened."""
+
+    @staticmethod
+    def _group(intro: str, statements: list[str]) -> list[dict]:
+        return [
+            {"guid": f"g{index}", "group_position": index, "group_intro": intro, "statement_text": text}
+            for index, text in enumerate(statements, start=1)
+        ]
+
+    def test_a_group_of_five_is_the_exam_order_itself(self) -> None:
+        group = self._group(
+            "Прочитайте внимательно текст и выполните задания 1–5. На плане изображён дачный участок.",
+            [
+                "Для объектов, указанных в таблице, определите, какими цифрами они обозначены на плане.",
+                "Плитки продаются в упаковках по 10 штук. Сколько упаковок понадобилось?",
+                "Найдите площадь, которую занимает баня. Ответ дайте в квадратных метрах.",
+                "Сколько процентов площади всего участка занимает сарай?",
+                "Хозяин планирует установить систему отопления. Он рассматривает два варианта.",
+            ],
+        )
+        numbers = numbers_for_group(group)
+        self.assertEqual([numbers[f"g{i}"][0] for i in range(1, 6)], [1, 2, 3, 4, 5])
+
+    def test_parallel_variants_come_in_blocks(self) -> None:
+        # Ten questions are two variants of one story: ФИПИ lists the first
+        # question of both, then the second of both, and so on.
+        statements = []
+        for text in (
+            "Для объектов, указанных в таблице, определите, какими цифрами они обозначены на плане.",
+            "Плитки продаются в упаковках. Сколько упаковок понадобилось?",
+            "Найдите площадь бани. Ответ дайте в квадратных метрах.",
+            "Сколько процентов площади всего участка занимает сарай?",
+            "Хозяин рассматривает два варианта отопления.",
+        ):
+            statements += [text, text]
+        numbers = numbers_for_group(self._group("Прочитайте внимательно текст.", statements))
+        self.assertEqual([numbers[f"g{i}"][0] for i in range(1, 11)], [1, 1, 2, 2, 3, 3, 4, 4, 5, 5])
+
+    def test_a_shuffled_group_is_read_by_what_the_questions_ask(self) -> None:
+        # The group of 40 built around a plan of a flat is not in order at all:
+        # the position rule would call the parquet question number 1.
+        group = self._group(
+            "Прочитайте внимательно текст и выполните задания 1–5. На рисунке изображён план двухкомнатной квартиры.",
+            [
+                "Паркетная доска размером 20 см на 80 см продаётся в упаковках по 14 штук. Сколько упаковок?",
+                "Для объектов, указанных в таблице, определите, какими цифрами они обозначены на плане.",
+                "Найдите площадь кладовой. Ответ дайте в квадратных метрах.",
+                "На сколько процентов площадь гостиной больше площади кладовой?",
+                "В квартире планируется установить стиральную машину.",
+            ],
+        )
+        numbers = numbers_for_group(group)
+        self.assertEqual([numbers[f"g{i}"][0] for i in range(1, 6)], [2, 1, 3, 4, 5])
+
+    def test_a_group_that_explains_neither_keeps_only_its_anchor(self) -> None:
+        # Order broken and no scenario to fall back on: the matching question is
+        # still number 1, and the rest waits rather than takes a guessed number.
+        group = self._group(
+            "Прочитайте внимательно текст. Хозяин дачного участка строит баню.",
+            [
+                "Найдите радиус закругления арки в сантиметрах.",
+                "Установите соответствие между массами и номерами печей.",
+                "Найдите радиус закругления арки в сантиметрах.",
+                "Установите соответствие между стоимостями и номерами печей.",
+                "Найдите объём парного отделения строящейся бани.",
+            ],
+        )
+        numbers = numbers_for_group(group)
+        self.assertEqual(sorted(numbers), ["g2", "g4"])
+        self.assertEqual({value[0] for value in numbers.values()}, {1})
 
 
 class TranscribedPictureTests(unittest.TestCase):

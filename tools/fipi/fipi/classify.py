@@ -62,18 +62,23 @@ SIGNATURES: list[tuple[re.Pattern[str], int, int | None, str]] = [
     # «Пользуясь этой формулой» is the position 12 stem.
     (_rx(r"пользуясь\s+(этой|данной|приведённой|приведенной)\s+формул"), 12, 1, CERTAIN),
     (_rx(r"(рассчитыва|вычисля)\w+\s+по\s+формуле"), 12, 1, LIKELY),
-    # Position 7 places a number on the line or reads one off it.
+    # Position 7 places a number on the line or reads one off it. The bank asks
+    # it three ways: a marked point, four points to be told apart by their
+    # decimals, and a root to be put between two integers.
     (_rx(r"на\s+координатной\s+прямой\s+отмечен"), 7, 1, CERTAIN),
+    (_rx(r"на\s+координатной\s+прямой\s+точк"), 7, 1, CERTAIN),
     (_rx(r"отмечен[оы]?\s+на\s+(числовой|координатной)\s+прямой"), 7, 1, CERTAIN),
-    (_rx(r"между\s+какими\s+целыми\s+числами"), 7, 1, CERTAIN),
+    (_rx(r"между\s+какими\s+(целыми\s+)?числами"), 7, 1, CERTAIN),
     (_rx(r"принадлежит\s+(отрезку|промежутку|интервалу)"), 7, 1, CERTAIN),
     (_rx(r"какому\s+промежутку\s+принадлежит"), 7, 1, CERTAIN),
     # The practical block opens with a plan the student has to label.
     (_rx(r"пользуясь\s+описанием,\s+определите"), 1, 1, LIKELY),
     (_rx(r"перенесите\s+последовательность\s+(из\s+)?четыр[её]х\s+цифр"), 1, 1, LIKELY),
-    # Position 13 asks which inequality a marked set solves.
+    # Position 13 asks which inequality a marked set solves — or, read the
+    # other way round, which picture solves the inequality.
     (_rx(r"решением\s+как(ого|ой)\s+из\s+(указанных\s+)?неравенств"), 13, 1, CERTAIN),
-    (_rx(r"укажите\s+решение\s+неравенств"), 13, 1, CERTAIN),
+    (_rx(r"укажите\s+решение\s+(системы\s+)?неравенств"), 13, 1, CERTAIN),
+    (_rx(r"укажите\s+неравенство,\s+решение\s+которого"), 13, 1, CERTAIN),
     # Part 2 stems.
     (_rx(r"^\s*докажите"), 24, 2, LIKELY),
     (_rx(r"докажите,\s+что"), 24, 2, LIKELY),
@@ -95,11 +100,37 @@ GEOMETRY_KEYWORDS: dict[int, tuple[tuple[str, int], ...]] = {
     18: (("клетчат", 5), ("клетк", 4)),
 }
 
-PART2_GEOMETRY_KEYWORDS: dict[int, tuple[tuple[str, int], ...]] = {
-    23: (("найдите", 2), ("вычислите", 2), ("площад", 1)),
-    24: (("докажите", 5),),
-    25: (("наибольш", 1), ("наименьш", 1)),
-}
+#: A figure inscribed in a circle carries the subthemes of both, so the vote
+#: ties and the weights above rarely clear the margin `_from_scores` asks for —
+#: «Сторона равностороннего треугольника равна 8√3. Найдите радиус описанной
+#: окружности» scores 5 against 3. The bank's own answer to the tie is visible
+#: in the 150 such questions the weights did resolve: every one of them sits at
+#: 16, whether the other figure is a triangle or a trapezoid. So the circle
+#: decides, and only a statement without one falls through to its figure.
+CIRCLE_SUBJECT = _rx(r"окружност|полуокружност|радиус|диаметр|хорд|касательн|касается|дуг[аиуе]")
+QUADRILATERAL_SUBJECT = _rx(r"трапеци|параллелограмм|ромб|четыр[её]хугольник|прямоугольник|квадрат")
+TRIANGLE_SUBJECT = _rx(r"треугольник|катет|гипотенуз|биссектрис|медиан")
+
+
+def _geometry_subject(text: str, band: set[int]) -> int | None:
+    """Which figure a part 1 geometry statement is actually about."""
+    for pattern, number in (
+        (CIRCLE_SUBJECT, 16),
+        (QUADRILATERAL_SUBJECT, 17),
+        (TRIANGLE_SUBJECT, 15),
+    ):
+        if number in band and pattern.search(text):
+            return number
+    return None
+
+
+#: Positions 23 and 25 are the same task — «геометрическая задача на
+#: вычисление» — set at two levels of difficulty, and the bank publishes no
+#: difficulty. Asking «найдите» or «площадь» separates neither, it only reads
+#: as an answer; the pair therefore stays a pair, and only the proof at 24 is
+#: told apart, by a word that means exactly that.
+PART2_GEOMETRY_PROOF = _rx(r"докажите")
+GEOMETRY_PART2_PAIR = (23, 25)
 
 PART2_ALGEBRA_KEYWORDS: dict[int, tuple[tuple[str, int], ...]] = {
     20: (("решите уравнение", 4), ("решите неравенство", 4), ("решите систему", 4),
@@ -139,8 +170,10 @@ SUBTHEME_PART2: dict[str, tuple[int, ...]] = {
 }
 
 #: The open bank flattens the practical series: each of the five questions is a
-#: separate record and nothing links them back into a group, so the position
-#: inside the block is not recoverable from what ФИПИ exposes.
+#: separate record, and the statement alone never says which of the five it is.
+#: The place inside the block comes from the group the question belongs to and
+#: is filled in afterwards by `practical.assign`, which needs every record at
+#: once; what is reported here is the block itself.
 PRACTICAL_BLOCK = (1, 2, 3, 4, 5)
 
 
@@ -210,10 +243,13 @@ def classify(
             verdict = _from_scores(_score(text, GEOMETRY_KEYWORDS), "keywords:geometry-part1")
             if verdict and verdict.number:
                 return verdict
+            subject = _geometry_subject(text, band)
+            if subject:
+                return Verdict(subject, LIKELY, "subject:geometry-part1", sorted(band))
         if band <= {23, 24, 25}:
-            verdict = _from_scores(_score(text, PART2_GEOMETRY_KEYWORDS), "keywords:geometry-part2")
-            if verdict and verdict.number:
-                return verdict
+            if PART2_GEOMETRY_PROOF.search(text):
+                return Verdict(24, LIKELY, "keywords:geometry-part2")
+            return Verdict(None, AMBIGUOUS, "kes:geometry-part2-pair", list(GEOMETRY_PART2_PAIR))
         if band <= {20, 21, 22}:
             verdict = _from_scores(_score(text, PART2_ALGEBRA_KEYWORDS), "keywords:algebra-part2")
             if verdict and verdict.number:
@@ -235,13 +271,22 @@ def classify(
         verdict = _from_scores(_score(text, GEOMETRY_KEYWORDS), "keywords:geometry-part1")
         if verdict and verdict.number:
             return verdict
+        subject = _geometry_subject(text, candidates)
+        if subject:
+            return Verdict(subject, LIKELY, "subject:geometry-part1", sorted(candidates))
     if candidates <= {23, 24, 25} and candidates:
-        verdict = _from_scores(_score(text, PART2_GEOMETRY_KEYWORDS), "keywords:geometry-part2")
-        if verdict and verdict.number:
-            return verdict
+        if PART2_GEOMETRY_PROOF.search(text):
+            return Verdict(24, LIKELY, "keywords:geometry-part2")
+        return Verdict(None, AMBIGUOUS, "kes:geometry-part2-pair", list(GEOMETRY_PART2_PAIR))
 
     if candidates:
         return Verdict(None, AMBIGUOUS, "kes:top-level", sorted(candidates))
+
+    # One question in the bank carries no КЭС at all. «Найдите значение
+    # выражения» over roots is the position 8 stem, and nothing else in part 1
+    # asks it of an irrational expression.
+    if part == 1 and _rx(r"найдите\s+значение\s+выражения").search(text):
+        return Verdict(8, LIKELY, "signature:8-no-kes")
     return Verdict(None, UNRESOLVED, "none", [])
 
 
