@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fipi.classify import AMBIGUOUS, CERTAIN, classify  # noqa: E402
 from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
+from fipi import parse  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
 from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
@@ -144,6 +145,41 @@ class ParseTests(unittest.TestCase):
 
     def test_to_text_drops_scripts(self) -> None:
         self.assertNotIn("ShowPictureQ", to_text("<script>ShowPictureQ('a')</script><p>текст</p>"))
+
+
+class InlineFormulaTests(unittest.TestCase):
+    """ФИПИ drew part of some conditions instead of writing them."""
+
+    #: A Word export: the picture is written from JavaScript inside a span that
+    #: nudges it onto the text baseline.
+    DRAWN = (
+        "<p>Диагональ ромба равна 28, а "
+        "<span style=\"position:relative;top:3.0pt\"><script language=\"JavaScript\">"
+        "ShowPictureQ(\"docs/PROJ/questions/GUID/innerimg2.gif\",\"\");"
+        "</script></span>. Найдите площадь ромба.</p>"
+    )
+    #: The task's own diagram: same call, but standing on its own.
+    DIAGRAM = (
+        "<p>Найдите площадь.</p><p align=right><script language=\"JavaScript\">"
+        "ShowPictureQ(\"docs/PROJ/questions/GUID/innerimg3.gif\",\"\");</script></p>"
+    )
+
+    def test_the_formula_returns_to_its_place_in_the_sentence(self) -> None:
+        # Without this the statement reads «равна 28, а . Найдите площадь» and
+        # the task cannot be solved at all.
+        text = to_text(self.DRAWN)
+        self.assertIn("равна 28, а ![](docs/PROJ/questions/GUID/innerimg2.gif). Найдите", text)
+
+    def test_a_standalone_drawing_stays_out_of_the_text(self) -> None:
+        # It belongs in the gallery beside the task, not inside the sentence.
+        self.assertNotIn("![]", to_text(self.DIAGRAM))
+
+    def test_inline_paths_are_reported_separately(self) -> None:
+        self.assertEqual(
+            parse.inline_picture_paths(self.DRAWN),
+            ["docs/PROJ/questions/GUID/innerimg2.gif"],
+        )
+        self.assertEqual(parse.inline_picture_paths(self.DIAGRAM), [])
 
 
 class TableTests(unittest.TestCase):

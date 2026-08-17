@@ -42,6 +42,21 @@ PICTURE_FN_RE = re.compile(r"(ShowPicture[A-Za-z0-9]*)\s*\(", re.IGNORECASE)
 FILES_LOCATION_RE = re.compile(r"files_location\s*=\s*['\"]([^'\"]*)['\"]", re.IGNORECASE)
 BARE_PICTURE_RE = re.compile(r"ShowPicture[A-Za-z0-9]*\(\s*['\"]([^'\"/]+?\.(?:png|jpe?g|gif|svg))['\"]", re.IGNORECASE)
 
+#: A formula ФИПИ drew instead of writing. Word exports put such fragments in
+#: `<span style="position:relative;top:3.0pt">` — the vertical nudge that sits a
+#: picture on the text baseline — and write the picture from JavaScript inside
+#: it. Stripping scripts therefore leaves an empty span and a hole in the
+#: sentence: «Диагональ ромба равна 28, а . Найдите площадь». 193 tasks are
+#: affected. The wrapper is an exact signal: across the whole bank only
+#: `innerimg*` fragments are ever wrapped this way, never a diagram.
+INLINE_PICTURE_RE = re.compile(
+    r"<span[^>]*position:\s*relative[^>]*>\s*"
+    r"<script\b[^>]*>\s*ShowPicture[A-Za-z0-9]*\(\s*"
+    r"['\"]([^'\"]+?\.(?:png|jpe?g|gif|svg))['\"][^)]*\)\s*;?\s*</script>\s*"
+    r"</span>",
+    re.IGNORECASE | re.DOTALL,
+)
+
 #: Position of a question inside its group, e.g. `title="Задание 3 в B64540"`.
 GROUP_RE = re.compile(r'class="number-in-group"\s+title="Задание\s+(\d+)\s+в\s+(\w+)\s*"', re.IGNORECASE)
 
@@ -104,6 +119,10 @@ class Task:
     kes_titles: list[str] = field(default_factory=list)
     choices: list[dict] = field(default_factory=list)
     images: list[str] = field(default_factory=list)
+    #: Subset of `images` that belongs *inside* a sentence rather than beside
+    #: it — a formula ФИПИ drew instead of writing. The statement references
+    #: these by markdown image, so they must not also appear in the gallery.
+    inline_images: list[str] = field(default_factory=list)
     picture_fns: list[str] = field(default_factory=list)
     #: Group of questions sharing one text and drawing, e.g. the practical
     #: block 1–5. `None` for standalone questions.
@@ -249,9 +268,24 @@ def _render_tables(fragment: str) -> str:
     return text
 
 
+def inline_pictures(fragment: str, template: str) -> str:
+    """Put a drawn-in formula back where the sentence expects it.
+
+    Called before scripts are stripped, otherwise the only trace left of the
+    fragment is an empty span.
+    """
+    return INLINE_PICTURE_RE.sub(lambda match: template.format(match.group(1)), fragment)
+
+
+def inline_picture_paths(fragment: str) -> list[str]:
+    """Paths of the formulas drawn inside the running text, in reading order."""
+    return [match.group(1) for match in INLINE_PICTURE_RE.finditer(fragment)]
+
+
 def to_text(fragment: str) -> str:
     """Readable plain text: MathML becomes `$…$`, tables become markdown grids."""
     text = inline_math(fragment)
+    text = inline_pictures(text, "![]({})")
     text = _render_tables(text)
     text = SCRIPT_RE.sub(" ", text)
     text = STYLE_RE.sub(" ", text)
@@ -272,6 +306,7 @@ def to_text(fragment: str) -> str:
 def clean_html(fragment: str) -> str:
     """Statement HTML with math inlined and scripts removed, layout preserved."""
     cleaned = inline_math(fragment)
+    cleaned = inline_pictures(cleaned, '<img class="inline-math" src="/{}" alt="">')
     cleaned = SCRIPT_RE.sub("", cleaned)
     cleaned = STYLE_RE.sub("", cleaned)
     return cleaned.strip()
@@ -413,6 +448,7 @@ def parse_page(page_html: str, page_index: int = -1) -> list[Task]:
                 kes_titles=kes_titles,
                 choices=_parse_choices(block),
                 images=_collect_images(block),
+                inline_images=inline_picture_paths(primary),
                 picture_fns=sorted(set(PICTURE_FN_RE.findall(block))),
                 answer_space=_parse_answer_space(block, answer_kind),
                 group_id=group.group(2) if group else None,

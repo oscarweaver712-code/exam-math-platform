@@ -2,7 +2,10 @@ import { BlockMath, InlineMath } from "react-katex";
 import "katex/dist/katex.min.css";
 import type { ReactNode } from "react";
 
-const mathToken = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
+const mathToken = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$|!\[[^\]]*\]\([^)\s]+\))/g;
+
+/** `![alt](src)` — a picture standing in for a word of the sentence. */
+const IMAGE_RE = /^!\[([^\]]*)\]\(([^)\s]+)\)$/;
 
 /** A markdown separator row: `|---|---|`, optionally with alignment colons. */
 const SEPARATOR_RE = /^\s*\|(\s*:?-{2,}:?\s*\|)+\s*$/;
@@ -56,6 +59,21 @@ function renderMath(text: string, keyPrefix: string): ReactNode[] {
             math={token.slice(1, -1).trim()}
             errorColor="#ff8b4b"
             renderError={() => <span className="text-sm text-[#ff8b4b]">Неверная формула</span>}
+          />
+        );
+      }
+      const image = IMAGE_RE.exec(token);
+      if (image) {
+        // ФИПИ drew part of some conditions instead of writing them, so this
+        // picture is a word of the sentence — «Диагональ ромба равна 28,
+        // а [tg BCA = 24/7]». It has to sit on the text baseline, at text
+        // size, or the sentence comes apart.
+        return (
+          <img
+            key={key}
+            src={image[2]}
+            alt={image[1] || "формула из условия"}
+            className="fipi-formula mx-[.15em] inline-block max-h-[2.4em] w-auto max-w-full align-middle"
           />
         );
       }

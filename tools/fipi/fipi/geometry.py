@@ -70,6 +70,10 @@ def _flatten(statement: str) -> str:
     text = re.sub(r"\\sqrt\s*\{([^{}]*)\}", r"√\1", text)
     text = re.sub(r"\\sqrt\s*(\d)", r"√\1", text)
     text = text.replace("\u00a0", " ").replace("\u2212", "-")
+    # A formula ФИПИ drew instead of writing is a markdown image in the
+    # statement. It carries no text, so matching ignores it; the value behind
+    # it comes from `data/inline_math.json` instead.
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
     text = re.sub(r"\s+", " ", text)
     # ФИПИ leaves stray spaces around punctuation and, in a handful of tasks,
     # inside a number itself («сторона AC равна 6 4»).

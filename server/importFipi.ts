@@ -62,6 +62,8 @@ type ClassifiedTask = {
   kes_titles: string[];
   choices: Array<{ value: string; text: string }>;
   images: string[];
+  /** Subset of `images` that sits inside a sentence: a formula drawn as a GIF. */
+  inline_images?: string[];
   image_urls: string[];
   group_id: string | null;
   group_position: number | null;
@@ -148,7 +150,9 @@ function answerKindFor(task: ClassifiedTask): "short_text" | "manual" {
 }
 
 function titleFor(task: ClassifiedTask): string {
-  const firstLine = task.statement_text.split("\n").find(line => line.trim()) ?? "";
+  // A drawn formula has no text to contribute, and its path is not a title.
+  const plain = task.statement_text.replace(/!\[[^\]]*\]\([^)]*\)/g, " ");
+  const firstLine = plain.split("\n").find(line => line.trim()) ?? "";
   const trimmed = firstLine.trim().replace(/\s+/g, " ");
   if (trimmed.length <= 200) return trimmed || `Задание ФИПИ ${task.short_id}`;
   return `${trimmed.slice(0, 197)}…`;
@@ -192,6 +196,47 @@ async function ensureBuckets(
   }
 }
 
+function contentTypeFor(file: string): string {
+  const extension = path.extname(file).toLowerCase();
+  if (extension === ".gif") return "image/gif";
+  if (extension === ".svg") return "image/svg+xml";
+  if (extension === ".jpg" || extension === ".jpeg") return "image/jpeg";
+  return "image/png";
+}
+
+/**
+ * Point the statement's inline formulas at our own copies.
+ *
+ * ФИПИ drew part of the condition instead of writing it — «Диагональ ромба
+ * равна 28, а ![](…innerimg2.gif). Найдите площадь» — so the picture is a word
+ * of the sentence, not an illustration beside it. The parser leaves the bank's
+ * own path in the markdown; here it becomes a stored URL. A picture we do not
+ * have locally is dropped rather than left as a broken image, which puts the
+ * hole back but never shows the learner a missing-image icon.
+ */
+async function inlineStatementImages(task: ClassifiedTask, imagesDir: string): Promise<string> {
+  const inline = task.inline_images ?? [];
+  if (!inline.length) return task.statement_text;
+
+  let markdown = task.statement_text;
+  for (const relPath of Array.from(new Set(inline))) {
+    const localFile = path.join(imagesDir, task.guid, path.basename(relPath));
+    let replacement = "";
+    if (fs.existsSync(localFile)) {
+      const { url } = await storagePut(
+        `fipi/${task.guid}/${path.basename(localFile)}`,
+        fs.readFileSync(localFile),
+        contentTypeFor(localFile),
+      );
+      replacement = `![](${url})`;
+    } else {
+      console.warn(`  ! нет формулы ${localFile}, условие останется с пропуском`);
+    }
+    markdown = markdown.split(`![](${relPath})`).join(replacement);
+  }
+  return markdown.replace(/[^\S\n]{2,}/g, " ").replace(/[^\S\n]+([.,;:?!])/g, "$1");
+}
+
 async function uploadImages(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   taskId: number,
@@ -208,8 +253,13 @@ async function uploadImages(
   // asset the first one missed, such as the plan shared by a whole group.
   const known = new Set(existing.map(row => row.sourceUrl).filter(Boolean));
 
+  // A formula drawn inside the sentence is already referenced by the statement
+  // itself; repeating it in the gallery shows the learner a stray «24/7».
+  const inline = new Set(task.inline_images ?? []);
+
   let uploaded = 0;
   for (const [index, relPath] of Array.from(task.images.entries())) {
+    if (inline.has(relPath)) continue;
     const remoteUrl = task.image_urls[index] ?? null;
     if (remoteUrl && known.has(remoteUrl)) continue;
     const localFile = path.join(imagesDir, task.guid, path.basename(relPath));
@@ -218,11 +268,8 @@ async function uploadImages(
       continue;
     }
     const bytes = fs.readFileSync(localFile);
-    const extension = path.extname(localFile).toLowerCase();
-    const contentType =
-      extension === ".gif" ? "image/gif" : extension === ".svg" ? "image/svg+xml" : "image/png";
 
-    const { url } = await storagePut(`fipi/${task.guid}/${path.basename(localFile)}`, bytes, contentType);
+    const { url } = await storagePut(`fipi/${task.guid}/${path.basename(localFile)}`, bytes, contentTypeFor(localFile));
 
     const timestamp = Date.now();
     await db.insert(taskVisuals).values({
@@ -365,7 +412,7 @@ async function main() {
       examTrackId: track.id,
       examTaskTypeId,
       title: titleFor(task),
-      statementMarkdown: task.statement_text,
+      statementMarkdown: await inlineStatementImages(task, imagesDir),
       answerChoices: task.choices.length
         ? task.choices.map(choice => ({ id: choice.value, label: choice.text }))
         : null,

@@ -171,6 +171,14 @@ html:not(.dark) .text-white, html:not(.dark) .hover\:text-white:hover { color: #
 html:not(.dark) .admin-console input, html:not(.dark) .admin-console textarea, html:not(.dark) .admin-console select,
 html:not(.dark) .tutor-console input, html:not(.dark) .tutor-console textarea, html:not(.dark) .tutor-console select,
 html:not(.dark) .bg-\[\#101012\] input, html:not(.dark) .bg-\[\#101012\] textarea, html:not(.dark) .bg-\[\#101012\] select { background-color: #fffdf9 !important; color: #26231f !important; border-color: #ded6cb !important; }
+/* Часть условий ФИПИ нарисовал картинкой: белый фон, чёрные глифы, поле по
+   краям прозрачное. Такая плашка посреди предложения выглядит наклейкой,
+   поэтому фон гасится блендом: в тёмной теме картинка инвертируется (фон
+   становится чёрным, глифы белыми) и «lighten» съедает чёрное; в светлой
+   «multiply» съедает белое. В обеих формула читается цветом текста вокруг. */
+.fipi-formula { filter: invert(1); mix-blend-mode: lighten; }
+html:not(.dark) .fipi-formula { filter: none; mix-blend-mode: multiply; }
+
 .theme-page { background-color: var(--app-page); color: var(--app-foreground); }
 .theme-surface { background-color: var(--app-surface); border-color: var(--app-border); }
 .theme-inset { background-color: var(--app-inset); border-color: var(--app-border); }
