@@ -234,7 +234,10 @@ async function inlineStatementImages(task: ClassifiedTask, imagesDir: string): P
     }
     markdown = markdown.split(`![](${relPath})`).join(replacement);
   }
-  return markdown.replace(/[^\S\n]{2,}/g, " ").replace(/[^\S\n]+([.,;:?!])/g, "$1");
+  // Tidy up after a picture we could not resolve: a dropped formula otherwise
+  // leaves «равна 28, а . Найдите». The `!` of `![](` is deliberately not in
+  // the punctuation class — it would eat the space in front of every formula.
+  return markdown.replace(/[^\S\n]{2,}/g, " ").replace(/[^\S\n]+([.,;:?])/g, "$1");
 }
 
 /**
