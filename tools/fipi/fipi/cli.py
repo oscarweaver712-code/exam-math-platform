@@ -19,6 +19,7 @@ from pathlib import Path
 from .classify import AMBIGUOUS, CERTAIN, LIKELY, classify, describe
 from .config import HOST, MATH_PROJ, MAX_PAGE_SIZE, FetchSettings
 from .fetch import FipiClient, download_image
+from .hints import collect as collect_hints, load as load_hints, match as match_hints
 from .parse import parse_group_intro, parse_page
 from .practical import assign as assign_practical_numbers
 from .equations import solve_equation
@@ -28,6 +29,7 @@ from .physics import solve_physics
 from .probability import solve_probability
 from .sequences import solve_sequence
 from .solver import answer_variants, bounded_candidates, solve_statement
+from .squared_paper import solve_squared_paper
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -36,6 +38,7 @@ TASKS_PATH = OUT / "tasks.jsonl"
 ANSWERS_PATH = OUT / "answers.jsonl"
 REJECTED_PATH = OUT / "rejected.jsonl"
 GROUPS_PATH = OUT / "groups.jsonl"
+HINTS_PATH = OUT / "hints.jsonl"
 IMAGES_DIR = OUT / "images"
 
 
@@ -198,6 +201,40 @@ def cmd_groups(args: argparse.Namespace) -> None:
     print("Теперь повторите `build`, чтобы привязать общий текст к заданиям.")
 
 
+def cmd_hints(args: argparse.Namespace) -> None:
+    """Look the open questions up in an outside catalogue.
+
+    Writes candidates only. Nothing here is an answer key until `solve` has put
+    it past ФИПИ's own checker, and nothing but the number is kept — no wording,
+    no worked solution, no picture.
+    """
+    tasks = _load_tasks()
+    hints = collect_hints(CACHE / "hints", delay=args.delay)
+    print(f"во внешнем каталоге задач с ответом: {len(hints)}")
+
+    known: set[str] = set()
+    if ANSWERS_PATH.exists():
+        with ANSWERS_PATH.open(encoding="utf-8") as handle:
+            known = {json.loads(line)["guid"] for line in handle if line.strip()}
+
+    open_tasks = [
+        task for task in tasks
+        if task["guid"] not in known and task["answer_kind"] != "full"
+    ]
+    candidates = match_hints(open_tasks, hints)
+    OUT.mkdir(parents=True, exist_ok=True)
+    with HINTS_PATH.open("w", encoding="utf-8") as handle:
+        for guid, answers in candidates.items():
+            handle.write(json.dumps({"guid": guid, "answers": answers}, ensure_ascii=False) + "\n")
+
+    by_number: Counter[object] = Counter(
+        task["oge_number"] for task in open_tasks if task["guid"] in candidates
+    )
+    print(f"без ключа сейчас {len(open_tasks)}, кандидат нашёлся для {len(candidates)} -> {HINTS_PATH}")
+    for number, count in sorted(by_number.items(), key=lambda item: (item[0] is None, item[0])):
+        print(f"  №{number}  {count}")
+
+
 def cmd_solve(args: argparse.Namespace) -> None:
     """Compute the answers we can, then confirm each one with ФИПИ.
 
@@ -209,9 +246,22 @@ def cmd_solve(args: argparse.Namespace) -> None:
     only for tasks an arithmetic evaluator already answered.
     """
     tasks = _load_tasks()
+    # Candidates found in an outside catalogue. They are proposals like any
+    # other and are only reached where nothing here could work the answer out.
+    hints = load_hints(HINTS_PATH)
+    if hints:
+        print(f"подсказок из внешнего каталога: {len(hints)}")
+
     candidates: list[tuple[dict, list[str]]] = []
     for task in tasks:
         if task["answer_kind"] == "short":
+            # Задание 18 has no numbers in the statement at all: the drawing is
+            # the data, so it is read rather than parsed. It comes first
+            # because every text rule would decline it anyway.
+            drawn = solve_squared_paper(task, IMAGES_DIR)
+            if drawn:
+                candidates.append((task, drawn))
+                continue
             answer = (
                 solve_statement(task["statement_text"])
                 or solve_probability(task["statement_text"], task["short_id"])
@@ -223,6 +273,10 @@ def cmd_solve(args: argparse.Namespace) -> None:
             )
             if answer is not None:
                 candidates.append((task, answer_variants(answer)))
+                continue
+            hinted = hints.get(task["guid"])
+            if hinted:
+                candidates.append((task, [variant for value in hinted for variant in answer_variants(value)]))
             continue
         if not args.choices:
             continue
@@ -403,6 +457,10 @@ def build_parser() -> argparse.ArgumentParser:
     solve.add_argument("--choices", action="store_true", help="also walk tasks whose form offers a finite set of answers")
     solve.add_argument("--dry-run", action="store_true", help="show what would be sent, without contacting ФИПИ")
     solve.set_defaults(func=cmd_solve)
+
+    hints = sub.add_parser("hints", help="look up candidate answers in an outside catalogue")
+    hints.add_argument("--delay", type=float, default=1.2, help="seconds between requests")
+    hints.set_defaults(func=cmd_hints)
 
     stats = sub.add_parser("stats", help="classification report")
     stats.set_defaults(func=cmd_stats)

@@ -19,6 +19,9 @@ from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi import parse  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
 from fipi.practical import numbers_for_group  # noqa: E402
+from fipi.hints import Hint, match as match_hints  # noqa: E402
+from fipi.lattice import Sheet, read_figure  # noqa: E402
+from fipi.raster import Image, read_image, read_png  # noqa: E402
 from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
 from fipi.geometry import solve_geometry  # noqa: E402
@@ -765,3 +768,136 @@ class GeometryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _squared_paper(
+    pitch: int = 17,
+    cells: tuple[int, int] = (8, 6),
+    figure: tuple[tuple[int, int], ...] = (),
+    grid_tone: int = 120,
+) -> Image:
+    """A sheet of squared paper with a polygon drawn on it, built by hand.
+
+    The tones mirror what ФИПИ ships: the paper's own lines are grey, the
+    figure is black, and a side lying along a line is the line gone black.
+    """
+    width = pitch * (cells[0] - 1) + 3
+    height = pitch * (cells[1] - 1) + 3
+    luma = [[255] * width for _ in range(height)]
+    for i in range(cells[0]):
+        for y in range(height):
+            luma[y][1 + i * pitch] = grid_tone
+    for j in range(cells[1]):
+        for x in range(width):
+            luma[1 + j * pitch][x] = grid_tone
+
+    def draw(a: tuple[int, int], b: tuple[int, int]) -> None:
+        x1, y1 = 1 + a[0] * pitch, 1 + a[1] * pitch
+        x2, y2 = 1 + b[0] * pitch, 1 + b[1] * pitch
+        steps = max(abs(x2 - x1), abs(y2 - y1)) * 3
+        for step in range(steps + 1):
+            t = step / steps
+            x, y = round(x1 + (x2 - x1) * t), round(y1 + (y2 - y1) * t)
+            for dx, dy in ((0, 0), (1, 0)):
+                if 0 <= x + dx < width and 0 <= y + dy < height:
+                    luma[y + dy][x + dx] = 0
+
+    for index in range(len(figure)):
+        draw(figure[index], figure[(index + 1) % len(figure)])
+    return Image(width=width, height=height, luma=luma)
+
+
+class SquaredPaperTests(unittest.TestCase):
+    """Reading задание 18 off the drawing, since the statement has no numbers."""
+
+    def test_the_paper_is_found_and_then_ignored(self) -> None:
+        sheet = Sheet(_squared_paper())
+        grid = sheet.grid()
+        self.assertIsNotNone(grid)
+        assert grid is not None
+        self.assertEqual(grid.size, (8, 6))
+        self.assertAlmostEqual(grid.pitch_x, 17, places=1)
+        # Nothing is drawn, so nothing is ink — the lines are not the figure.
+        self.assertFalse(any(sheet.is_ink(x, y) for x in range(20) for y in range(20)))
+
+    def test_a_triangle_is_measured_in_cells(self) -> None:
+        sheet = Sheet(_squared_paper(figure=((1, 1), (6, 1), (1, 4))))
+        figure = read_figure(sheet)
+        self.assertIsNotNone(figure)
+        assert figure is not None
+        self.assertEqual(sorted(figure.vertices), [(1, 1), (1, 4), (6, 1)])
+        self.assertEqual(figure.area(), 7.5)
+
+    def test_a_side_along_a_paper_line_still_counts(self) -> None:
+        # Both bases of this trapezoid run along grid lines, where the paper is
+        # already dark; only the thickening gives them away.
+        sheet = Sheet(_squared_paper(figure=((1, 4), (7, 4), (5, 1), (2, 1))))
+        figure = read_figure(sheet)
+        self.assertIsNotNone(figure)
+        assert figure is not None
+        self.assertEqual(figure.area(), 13.5)
+
+
+class RasterTests(unittest.TestCase):
+    def test_a_png_comes_back_as_grey(self) -> None:
+        import struct
+        import tempfile
+        import zlib
+
+        width = height = 2
+        raw = b"".join(b"\x00" + bytes([0, 255] if y == 0 else [255, 0]) for y in range(height))
+
+        def chunk(kind: bytes, body: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(body))
+                + kind
+                + body
+                + struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF)
+            )
+
+        png = (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw))
+            + chunk(b"IEND", b"")
+        )
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as handle:
+            handle.write(png)
+            path = handle.name
+        image = read_png(path)
+        self.assertEqual(image.luma, [[0, 255], [255, 0]])
+        # The dispatcher picks the reader by what the file actually is.
+        self.assertEqual(read_image(path).luma, image.luma)
+
+
+class HintTests(unittest.TestCase):
+    """An outside catalogue proposes; ФИПИ's checker disposes."""
+
+    def test_a_task_is_recognised_by_its_wording(self) -> None:
+        hints = [
+            Hint(
+                "1",
+                "18",
+                "Тип 18 № 1 На клетчатой бумаге с размером клетки 1×1 изображён ромб. "
+                "Найдите его площадь. Ответ: 12",
+                "12",
+            ),
+            Hint(
+                "2",
+                "18",
+                "Тип 18 № 2 На клетчатой бумаге с размером клетки 1×1 изображена трапеция. "
+                "Найдите длину её средней линии. Ответ: 5",
+                "5",
+            ),
+        ]
+        task = {
+            "guid": "G",
+            "oge_number": 18,
+            "statement_text": "На клетчатой бумаге с размером клетки $1\\times 1$ изображён ромб. Найдите его площадь.",
+        }
+        self.assertEqual(match_hints([task], hints), {"G": ["12"]})
+
+    def test_a_statement_too_short_to_identify_anything_is_left_alone(self) -> None:
+        hints = [Hint("1", "15", "Тип 15 № 1 Найдите площадь. Ответ: 3", "3")]
+        task = {"guid": "G", "oge_number": 15, "statement_text": "Найдите площадь."}
+        self.assertEqual(match_hints([task], hints), {})
