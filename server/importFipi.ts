@@ -12,8 +12,13 @@
  * Re-running after re-classifying is therefore safe and cheap.
  *
  * The importer deliberately does *not* invent content. ФИПИ publishes neither
- * answers nor worked solutions, so `correctAnswer` stays null and
- * `solutionMarkdown` holds an explicit placeholder for an editor to replace.
+ * answers nor worked solutions: a key appears only if `answers.jsonl` carries
+ * one confirmed against the bank's own checker, and a new task starts with an
+ * explicit placeholder where its разбор will go.
+ *
+ * Re-running never undoes editorial work. Keys and разборы also arrive through
+ * the admin, and this file is not their source of truth: an existing task keeps
+ * its разбор, and keeps its key unless this run has one for it.
  */
 
 import fs from "node:fs";
@@ -365,8 +370,6 @@ async function main() {
         ? task.choices.map(choice => ({ id: choice.value, label: choice.text }))
         : null,
       answerKind: answerKindFor(task),
-      correctAnswer: answerByGuid.get(task.guid) ?? null,
-      solutionMarkdown: SOLUTION_PLACEHOLDER,
       sourceKind: "fipi" as const,
       sourceTitle: "Открытый банк заданий ОГЭ, ФИПИ",
       sourceUrl: task.url,
@@ -375,18 +378,28 @@ async function main() {
       updatedAt: timestamp,
     };
 
+    const key = answerByGuid.get(task.guid) ?? null;
     const existingId = idByGuid.get(task.guid);
     let taskId: number;
 
     if (existingId) {
-      // Keep slug, internalId and catalogNumber stable across re-imports.
-      await db.update(tasks).set(shared).where(eq(tasks.id, existingId));
+      // Keep slug, internalId and catalogNumber stable across re-imports —
+      // and keep whatever a human has since added. A re-import refreshes what
+      // came from ФИПИ; it must not undo an editor's work. The answer key is
+      // only written when this run actually has one, because keys also arrive
+      // through the admin, and the разбор is written once and never reset.
+      await db
+        .update(tasks)
+        .set(key ? { ...shared, correctAnswer: key } : shared)
+        .where(eq(tasks.id, existingId));
       taskId = existingId;
       updated += 1;
     } else {
       catalogNumber += 1;
       await db.insert(tasks).values({
         ...shared,
+        correctAnswer: key,
+        solutionMarkdown: SOLUTION_PLACEHOLDER,
         slug: `fipi-${task.short_id.toLowerCase()}`,
         internalId: `SH911-OGE-FIPI-${task.short_id.toUpperCase()}`,
         catalogNumber,
