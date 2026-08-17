@@ -489,6 +489,39 @@ RULES: list[tuple[re.Pattern, object]] = [
                 rf"пересекаются под углом {DEG}\. Найдите угол"),
      lambda m: _num(m.group(1)) / 2),
 
+    # --- circles, in the wording the classifier could not place -------------
+    # These read like tasks 15–17 but carry a КЭС that fits several positions,
+    # so they land in the «требует разбора» bucket. The geometry is the same.
+    (re.compile(r"Угол [A-Z] трапеции [A-Z]{4} с основаниями [A-Z]{2} и [A-Z]{2}, "
+                rf"вписанной в окружность, равен {DEG}\. Найдите угол"),
+     # A trapezoid fits a circle only if it is isosceles; the two angles on one
+     # lateral side lie between the parallel bases and add up to a straight angle.
+     lambda m: 180.0 - _num(m.group(1))),
+    (re.compile(rf"Сторона равностороннего треугольника равна {V}\. "
+                r"Найдите радиус окружности, описанной"),
+     lambda m: _num(m.group(1)) / ROOT3),
+    (re.compile(r"Радиус окружности, описанной около равностороннего треугольника, "
+                rf"равен {V}\. Найдите длину стороны"),
+     lambda m: _num(m.group(1)) * ROOT3),
+    (re.compile(rf"В треугольнике [A-Z]{{3}} известно, что [A-Z]{{2}}={V}, [A-Z]{{2}}={V}, "
+                rf"sin ∠[A-Z]{{3}}={V}\. Найдите площадь"),
+     lambda m: _num(m.group(1)) * _num(m.group(2)) * _num(m.group(3)) / 2),
+    (re.compile(r"Трапеция [A-Z]{4} с основаниями [A-Z]{2} и [A-Z]{2} описана около окружности, "
+                rf"[A-Z]{{2}}={V}, [A-Z]{{2}}={V}, [A-Z]{{2}}={V}\. Найдите"),
+     lambda m: _num(m.group(1)) + _num(m.group(3)) - _num(m.group(2))),
+    (re.compile(rf"В треугольнике [A-Z]{{3}} известно, что [A-Z]{{2}}={V}, [A-Z]{{2}}={V}, "
+                r"угол [A-Z] равен 90°\. Найдите радиус описанной"),
+     # The hypotenuse of a right triangle is a diameter of its circumcircle.
+     lambda m: math.hypot(_num(m.group(1)), _num(m.group(2))) / 2),
+    (re.compile(rf"В треугольнике [A-Z]{{3}} угол [A-Z] равен {DEG}, [A-Z]{{2}}={V}\. "
+                r"Найдите радиус окружности, описанной"),
+     lambda m: _num(m.group(2)) / (2 * _sin(_num(m.group(1))))),
+    (re.compile(r"Точка [A-Z] является серединой стороны [A-Z]{2} квадрата [A-Z]{4}\. "
+                r"Радиус окружности с центром в точке [A-Z], проходящей через вершину [A-Z], "
+                rf"равен {V}\. Найдите площадь квадрата"),
+     # Half a side and a whole side away from the vertex: R² = a²/4 + a².
+     lambda m: 4 * _num(m.group(1)) ** 2 / 5),
+
     # --- square -------------------------------------------------------------
     (re.compile(rf"Сторона квадрата равна {V}\. Найдите диагональ"),
      lambda m: _num(m.group(1)) * ROOT2),

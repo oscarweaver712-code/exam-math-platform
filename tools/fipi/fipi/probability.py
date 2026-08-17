@@ -18,6 +18,15 @@ def _n(text: str) -> Fraction:
     return Fraction(text.replace(",", "."))
 
 
+def _terminating(value: Fraction) -> bool:
+    """Whether the fraction writes out as a finite decimal, as answers do."""
+    denominator = value.denominator
+    for factor in (2, 5):
+        while denominator % factor == 0:
+            denominator //= factor
+    return denominator == 1
+
+
 def _format(value: Fraction) -> str:
     if value.denominator == 1:
         return str(value.numerator)
@@ -70,14 +79,127 @@ def _pens(statement: str) -> str | None:
     return _format(sum(picked) / total)
 
 
+#: The bank writes some counts as words: «двенадцать неисправных».
+WORD_NUMBERS = {
+    "один": 1, "одна": 1, "два": 2, "две": 2, "три": 3, "четыре": 4, "пять": 5,
+    "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
+    "одиннадцать": 11, "двенадцать": 12, "тринадцать": 13, "четырнадцать": 14,
+    "пятнадцать": 15, "шестнадцать": 16, "семнадцать": 17, "восемнадцать": 18,
+    "девятнадцать": 19, "двадцать": 20, "тридцать": 30, "сорок": 40,
+}
+COUNT = r"(\d+|[а-яё]+)"
+
+
+def _count(token: str) -> Fraction | None:
+    """A count written either way: `12` or «двенадцать»."""
+    token = token.strip().lower().replace("ё", "е")
+    if re.fullmatch(r"\d+", token):
+        return Fraction(token)
+    for word, value in WORD_NUMBERS.items():
+        if word.replace("ё", "е") == token:
+            return Fraction(value)
+    return None
+
+
+def _flashlights(text: str) -> Fraction | None:
+    """«из 80 фонариков двенадцать неисправных … окажется исправен»."""
+    match = re.search(
+        rf"из\s+{NUM}\s+карманных фонариков.*?{COUNT}\s+неисправн.*?исправен",
+        text, re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+    total, broken = _n(match.group(1)), _count(match.group(2))
+    if broken is None or not total:
+        return None
+    return (total - broken) / total
+
+
+def _two_groups(text: str) -> Fraction | None:
+    """«18 чёрных и 22 синих маркера … окажется синим» — one draw, two kinds."""
+    match = re.search(rf"{NUM}\s+([а-яё]+)\s+и\s+{NUM}\s+([а-яё]+)\s+[а-яё]+", text, re.IGNORECASE)
+    asked = re.search(r"(?:окажется|будет)\s+([а-яё]+)", text, re.IGNORECASE)
+    if not match or not asked:
+        return None
+    counts = {_stem(match.group(2)): _n(match.group(1)), _stem(match.group(4)): _n(match.group(3))}
+    wanted = counts.get(_stem(asked.group(1)))
+    total = sum(counts.values())
+    if wanted is None or not total:
+        return None
+    return wanted / total
+
+
+def _second_draw(text: str) -> Fraction | None:
+    """«первый карандаш зелёный … второй тоже» — one of that colour is gone.
+
+    The condition is not decoration: it removes a pencil from the box, so both
+    the favourable count and the total shrink by one.
+    """
+    match = re.search(rf"{NUM}\s+([а-яё]+)\s+и\s+{NUM}\s+([а-яё]+)\s+карандаш", text, re.IGNORECASE)
+    first = re.search(r"первый\s+карандаш\s+оказался\s+([а-яё]+)", text, re.IGNORECASE)
+    if not match or not first or "тоже" not in text:
+        return None
+    counts = {_stem(match.group(2)): _n(match.group(1)), _stem(match.group(4)): _n(match.group(3))}
+    drawn = counts.get(_stem(first.group(1)))
+    total = sum(counts.values())
+    if drawn is None or total < 2:
+        return None
+    return (drawn - 1) / (total - 1)
+
+
+def _by_country(text: str) -> Fraction | None:
+    """«7 спортсменов из России, 1 из Швеции и 2 из Норвегии … из Швеции»."""
+    parts = re.findall(rf"{NUM}\s+спортсмен\w*\s+из\s+([А-Яа-яЁё]+)", text)
+    marker = "стартовать спортсмен из"
+    if len(parts) < 2 or marker not in text:
+        return None
+    counts: dict[str, Fraction] = {}
+    for number, country in parts:
+        counts[_stem(country)] = counts.get(_stem(country), Fraction(0)) + _n(number)
+    # «из Норвегии или Швеции» names two countries, so the tail is read whole
+    # rather than taking the first word after «из».
+    asked = {_stem(word) for word in re.findall(r"[А-Яа-яЁё]+", text.split(marker, 1)[1])}
+    wanted = sum((count for stem, count in counts.items() if stem in asked), Fraction(0))
+    total = sum(counts.values())
+    if not wanted or not total:
+        return None
+    return wanted / total
+
+
+def _puzzles(text: str) -> Fraction | None:
+    """«25 пазлов: 18 с машинами и 7 с видами городов … достанется пазл с …»."""
+    match = re.search(
+        rf"закупил\s+{NUM}\s+пазл\w*.*?из них\s+{NUM}\s+с\s+машинами\s+и\s+{NUM}\s+с\s+вид\w+",
+        text, re.IGNORECASE | re.DOTALL,
+    )
+    asked = re.search(r"достанется\s+пазл\s+с\s+([а-яё]+)", text, re.IGNORECASE)
+    if not match or not asked:
+        return None
+    total = _n(match.group(1))
+    wanted = _n(match.group(2)) if _stem(asked.group(1)) == "маш" else _n(match.group(3))
+    return wanted / total if total else None
+
+
+def _dice_sum(text: str) -> Fraction | None:
+    """«сумма выпавших очков равна 3, 4 или 5» — 36 outcomes, counted."""
+    if "кубик" not in text.lower():
+        return None
+    # Stop at the closing quote: `[\dи,\s]+` swallows the «и» of «или» and
+            # then gives up, losing the last value of the list.
+    match = re.search(r"сумма выпавших очков равна\s+([^»\"]+)", text, re.IGNORECASE)
+    if not match:
+        return None
+    wanted = {int(value) for value in re.findall(r"\d+", match.group(1))}
+    if not wanted:
+        return None
+    hits = sum(1 for first in range(1, 7) for second in range(1, 7) if first + second in wanted)
+    return Fraction(hits, 36)
+
+
 #: Each entry is (pattern, how to turn the captured numbers into a probability).
 _RULES: list[tuple[re.Pattern[str], object]] = [
     # «20 чашек: 10 с красными цветами, остальные с синими … синими»
     (re.compile(rf"{NUM}\s+чашек:\s*{NUM}\s+с\s+красными.*?синими", re.IGNORECASE | re.DOTALL),
-     lambda g: (_n(g[0]) - _n(g[1])) / _n(g[0])),
-    # «из 80 … двенадцать неисправных … окажется исправен» — word numerals vary,
-    # so the count is read from the digits that are present.
-    (re.compile(rf"из\s+{NUM}\s+карманных фонариков.*?{NUM}\s+неисправн.*?исправен", re.IGNORECASE | re.DOTALL),
      lambda g: (_n(g[0]) - _n(g[1])) / _n(g[0])),
     # «На экзамене 20 билетов, … не выучил 7 … выученный билет»
     (re.compile(rf"экзамене\s+{NUM}\s+билет.*?не\s+выучил\s+{NUM}.*?выученный", re.IGNORECASE | re.DOTALL),
@@ -98,6 +220,16 @@ def solve_probability(statement: str) -> str | None:
     pens = _pens(text)
     if pens is not None:
         return pens
+
+    for shape in (_flashlights, _dice_sum, _puzzles, _by_country, _second_draw, _two_groups):
+        try:
+            value = shape(text)
+        except (ZeroDivisionError, ValueError, TypeError):
+            continue
+        # An ОГЭ probability is written as a terminating decimal. A value like
+        # 5/36 means the shape was read wrong, and the request would be wasted.
+        if value is not None and 0 <= value <= 1 and _terminating(value):
+            return _format(value)
 
     for pattern, compute in _RULES:
         match = pattern.search(text)

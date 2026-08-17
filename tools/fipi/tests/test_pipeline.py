@@ -22,6 +22,7 @@ from fipi.equations import solve_equation  # noqa: E402
 from fipi.formulas import solve_formula  # noqa: E402
 from fipi.geometry import solve_geometry  # noqa: E402
 from fipi.probability import solve_probability  # noqa: E402
+from fipi.sequences import solve_sequence  # noqa: E402
 from fipi.solver import format_answer, solve_statement  # noqa: E402
 
 MATH = "<m:math><m:mstyle displaystyle=\"true\"><m:semantics>{}</m:semantics></m:mstyle></m:math>"
@@ -330,6 +331,34 @@ class FormulaTests(unittest.TestCase):
         # same breath as the given number; a wide match reads 20 as the cost.
         self.assertNotEqual(solve_formula(self.WELL), "20")
 
+    def test_units_and_greek_do_not_stop_the_translation(self) -> None:
+        # `\text{…}` holds the units and `\omega` the quantity; both used to
+        # make the formula untranslatable and the whole family unreachable.
+        self.assertEqual(
+            solve_formula(
+                "Центростремительное ускорение при движении по окружности вычисляется по "
+                "формуле $a={\\text{ω}}^2R$, где $\\text{ω}$ — угловая скорость, "
+                "$R$ — радиус окружности (в метрах). Пользуясь этой формулой, найдите "
+                "радиус $R$, если угловая скорость равна $9{\\text{с}}^{-1}$, "
+                "а центростремительное ускорение равно $243\\text{м}$."
+            ),
+            "3",
+        )
+
+    def test_a_value_stated_as_an_equation_is_read_as_one(self) -> None:
+        # `$\sin α=3/7$` is a given number, not something to compute, and the
+        # subscript of `$d_2$` is a name rather than the value 2.
+        self.assertEqual(
+            solve_formula(
+                "Площадь четырёхугольника можно вычислить по формуле "
+                "$S=\\frac{d_1d_2\\sin \\text{α}}{2}$, где $d_1$ и $d_2$ — длины "
+                "диагоналей четырёхугольника, $\\text{α}$ — угол между диагоналями. "
+                "Пользуясь этой формулой, найдите длину диагонали $d_2$, если $d_1=6$, "
+                "$\\sin \\text{α}=\\frac{3}{7}$, a $S=18$."
+            ),
+            "14",
+        )
+
     def test_ignores_a_statement_without_a_formula(self) -> None:
         self.assertIsNone(solve_formula("Найдите площадь треугольника со стороной 5."))
 
@@ -351,6 +380,30 @@ class ProbabilityTests(unittest.TestCase):
             "того, что случайно выбранная в этом магазине ручка будет красной или синей."
         )
         self.assertEqual(solve_probability(statement), "0.5")
+
+    def test_counts_written_as_words(self) -> None:
+        self.assertEqual(
+            solve_probability("В среднем из 80 карманных фонариков, поступивших в продажу, "
+                              "двенадцать неисправных. Найдите вероятность того, что "
+                              "выбранный наудачу в магазине фонарик окажется исправен."),
+            "0.85",
+        )
+
+    def test_a_condition_removes_one_from_the_box(self) -> None:
+        self.assertEqual(
+            solve_probability("Из ящика, где хранятся 7 жёлтых и 14 зелёных карандашей, "
+                              "не глядя достали два карандаша. Известно, что первый карандаш "
+                              "оказался зелёным. Найдите вероятность того, что второй "
+                              "карандаш тоже оказался зелёным."),
+            "0.65",
+        )
+
+    def test_dice_outcomes_are_counted_not_guessed(self) -> None:
+        self.assertEqual(
+            solve_probability("Симметричный игральный кубик бросают два раза. Найдите "
+                              "вероятность события «сумма выпавших очков равна 3, 4 или 5»."),
+            "0.25",
+        )
 
     def test_returns_none_for_an_unknown_shape(self) -> None:
         self.assertIsNone(solve_probability("Найдите вероятность попадания в мишень трижды подряд."))
@@ -430,6 +483,52 @@ class ClassifyTests(unittest.TestCase):
     def test_unknown_metadata_is_unresolved_not_guessed(self) -> None:
         verdict = classify("Некоторый текст без признаков.", "short", [])
         self.assertIsNone(verdict.number)
+
+
+class SequenceTests(unittest.TestCase):
+    """Task 14 tells a story and leaves the progression to the reader."""
+
+    def test_sum_of_the_first_seconds(self) -> None:
+        self.assertEqual(
+            solve_sequence("Поезд начал движение от станции. За первую секунду состав "
+                           "сдвинулся на 0,6 м, а за каждую следующую секунду он проходил "
+                           "на 0,1 м больше, чем за предыдущую. Сколько метров состав "
+                           "прошёл за первые 7 секунд движения?"),
+            "6.3",
+        )
+
+    def test_braking_counts_its_own_terms(self) -> None:
+        # «до полной остановки» gives no number of seconds: the car stops when
+        # a second would carry it nowhere, and that count is the answer's half.
+        self.assertEqual(
+            solve_sequence("Водитель автомобиля начал торможение. За секунду после начала "
+                           "торможения автомобиль проехал 20 м, а за каждую следующую "
+                           "секунду он проезжал на 4 м меньше, чем за предыдущую. Сколько "
+                           "метров автомобиль прошёл до полной остановки?"),
+            "60",
+        )
+
+    def test_two_rows_give_the_step(self) -> None:
+        self.assertEqual(
+            solve_sequence("В амфитеатре 14 рядов, причём в каждом следующем ряду на одно "
+                           "и то же число мест больше, чем в предыдущем. В пятом ряду 27 "
+                           "мест, а в восьмом ряду 36 мест. Сколько мест в последнем ряду "
+                           "амфитеатра?"),
+            "54",
+        )
+
+    def test_the_answer_can_be_an_index(self) -> None:
+        # The threshold is in centimetres while the heights are in metres.
+        self.assertEqual(
+            solve_sequence("Каучуковый мячик с силой бросили на асфальт. Отскочив, мячик "
+                           "подпрыгнул на 4 м, а при каждом следующем прыжке он поднимался "
+                           "на высоту в два раза меньше предыдущей. При каком по счёту "
+                           "прыжке мячик в первый раз не достигнет высоты 20 см?"),
+            "6",
+        )
+
+    def test_a_story_it_does_not_know_is_left_alone(self) -> None:
+        self.assertIsNone(solve_sequence("В корзине лежат яблоки. Сколько их?"))
 
 
 class GeometryTests(unittest.TestCase):

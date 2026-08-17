@@ -24,6 +24,7 @@ from .equations import solve_equation
 from .formulas import solve_formula
 from .geometry import solve_geometry
 from .probability import solve_probability
+from .sequences import solve_sequence
 from .solver import answer_variants, bounded_candidates, solve_statement
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -205,6 +206,7 @@ def cmd_solve(args: argparse.Namespace) -> None:
                 or solve_equation(task["statement_text"])
                 or solve_formula(task["statement_text"])
                 or solve_geometry(task["statement_text"], task["short_id"])
+                or solve_sequence(task["statement_text"])
             )
             if answer is not None:
                 candidates.append((task, answer_variants(answer)))
