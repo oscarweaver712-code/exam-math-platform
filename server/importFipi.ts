@@ -24,7 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import {
   examTaskTypes,
   examTracks,
@@ -237,6 +237,36 @@ async function inlineStatementImages(task: ClassifiedTask, imagesDir: string): P
   return markdown.replace(/[^\S\n]{2,}/g, " ").replace(/[^\S\n]+([.,;:?!])/g, "$1");
 }
 
+/**
+ * Take a drawn-in formula out of the gallery beside the task.
+ *
+ * Earlier imports filed every picture the same way, so a bare «24/7» sat next
+ * to the diagram explaining nothing. Now that the statement carries the formula
+ * in its own sentence, that row is a duplicate.
+ */
+async function dropInlineVisuals(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  taskId: number,
+  task: ClassifiedTask,
+): Promise<number> {
+  const inline = task.inline_images ?? [];
+  if (!inline.length) return 0;
+
+  const urls = inline
+    .map(relPath => task.image_urls[task.images.indexOf(relPath)])
+    .filter((url): url is string => Boolean(url));
+  if (!urls.length) return 0;
+
+  const stale = await db
+    .select({ id: taskVisuals.id })
+    .from(taskVisuals)
+    .where(and(eq(taskVisuals.taskId, taskId), inArray(taskVisuals.sourceUrl, urls)));
+  if (!stale.length) return 0;
+
+  await db.delete(taskVisuals).where(inArray(taskVisuals.id, stale.map(row => row.id)));
+  return stale.length;
+}
+
 async function uploadImages(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   taskId: number,
@@ -394,6 +424,7 @@ async function main() {
   let updated = 0;
   let skipped = 0;
   let images = 0;
+  let detached = 0;
   const perKim = new Map<string, number>();
 
   for await (const task of readTasks(tasksFile, args.limit)) {
@@ -470,6 +501,7 @@ async function main() {
     }
 
     await upsertGroupIntro(db, taskId, task);
+    detached += await dropInlineVisuals(db, taskId, task);
 
     if (args.withImages) {
       images += await uploadImages(db, taskId, task, imagesDir);
@@ -482,6 +514,7 @@ async function main() {
   console.log(`\nДобавлено ${inserted}, обновлено ${updated}, пропущено ${skipped}`);
   if (answerByGuid.size) console.log(`С проверяемым ответом: ${answerByGuid.size}`);
   if (args.withImages) console.log(`Загружено изображений: ${images}`);
+  if (detached) console.log(`Формул убрано из галереи в текст условия: ${detached}`);
   console.log(`Статус импортированных задач: ${args.status}`);
 
   console.log("\nПо номерам ОГЭ:");
