@@ -21,6 +21,7 @@ import TheoryVersionCompare from "./pages/TheoryVersionCompare";
 import AdminPromos from "./pages/AdminPromos";
 import { ExamTrackLanding, ExamTracks, SubjectCatalog } from "./pages/CatalogRoutes";
 import Progress from "./pages/Progress";
+import AdminSolutions from "./pages/AdminSolutions";
 import { VariantDetail, Variants } from "./pages/Variants";
 import VariantSolve from "./pages/VariantSolve";
 import SettingsPage from "./pages/SettingsPage";
@@ -49,6 +50,7 @@ function Router() {
       <Route path={"/tutor"} component={TutorCabinetShell} />
       <Route path={"/admin/tasks"} component={AdminTasks} />
       <Route path={"/admin/tasks/control"} component={AdminTaskControl} />
+      <Route path={"/admin/solutions"} component={AdminSolutions} />
       <Route path={"/admin/access"} component={AdminAccess} />
       <Route path={"/admin/intake"} component={AdminIntake} />
       <Route path={"/admin/theory"} component={AdminTheory} />

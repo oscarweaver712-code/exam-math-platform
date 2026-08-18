@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { SOLUTION_PLACEHOLDER, isSolutionMissing } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
@@ -650,6 +651,171 @@ export const schoolRouter = router({
         if (input.additionalMaterials.length) await db.insert(taskAdditionalMaterials).values(input.additionalMaterials.map((material, index) => ({ taskId: input.taskId, title: material.title, bodyMarkdown: material.bodyMarkdown, sortOrder: index + 1, createdAt: timestamp, updatedAt: timestamp })));
         await recordTaskEvent(db, input.taskId, ctx.user.id, input.status === "published" ? "published" : "updated", "Обновление содержания или источника.");
         return { taskId: input.taskId };
+      }),
+    /**
+     * Tasks still waiting for a разбор.
+     *
+     * ФИПИ publishes no worked solutions, so all 3884 imported tasks start
+     * without one, and part 2 has nothing else to offer a learner: a
+     * развёрнутый ответ cannot be checked automatically, only explained. This
+     * is the queue that work is done from, newest number first.
+     */
+    solutionQueue: adminProcedure
+      .input(
+        z.object({
+          kimNumber: z.string().trim().max(16).optional(),
+          part: z.enum(["part1", "part2"]).optional(),
+          /** Written разборы are worth re-reading too, so this can be turned off. */
+          onlyMissing: z.boolean().default(true),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(6).max(48).default(20),
+        }),
+      )
+      .query(async ({ input }) => {
+        const { db, trackId } = await getMathTrack();
+        const missing = sql`LEFT(${tasks.solutionMarkdown}, 24) = ${SOLUTION_PLACEHOLDER.slice(0, 24)}`;
+        const filters = [eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt)];
+        if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
+        if (input.part) filters.push(eq(examTaskTypes.part, input.part));
+        if (input.onlyMissing) filters.push(missing);
+
+        const [rows, [counted], byPart] = await Promise.all([
+          db
+            .select({
+              taskId: tasks.id,
+              catalogNumber: tasks.catalogNumber,
+              title: tasks.title,
+              slug: tasks.slug,
+              statementMarkdown: tasks.statementMarkdown,
+              correctAnswer: tasks.correctAnswer,
+              answerKind: tasks.answerKind,
+              kimNumber: examTaskTypes.kimNumber,
+              part: examTaskTypes.part,
+              taskType: examTaskTypes.title,
+              solutionMarkdown: tasks.solutionMarkdown,
+            })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters))
+            .orderBy(asc(examTaskTypes.sortOrder), asc(tasks.catalogNumber))
+            .limit(input.pageSize)
+            .offset((input.page - 1) * input.pageSize),
+          db
+            .select({ total: sql<number>`count(${tasks.id})` })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters)),
+          db
+            .select({
+              part: examTaskTypes.part,
+              waiting: sql<number>`SUM(CASE WHEN LEFT(${tasks.solutionMarkdown}, 24) = ${SOLUTION_PLACEHOLDER.slice(0, 24)} THEN 1 ELSE 0 END)`,
+              total: sql<number>`count(${tasks.id})`,
+            })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt)))
+            .groupBy(examTaskTypes.part),
+        ]);
+
+        const total = Number(counted?.total ?? 0);
+        return {
+          items: rows.map(row => ({
+            ...row,
+            written: !isSolutionMissing(row.solutionMarkdown),
+            solutionMarkdown: undefined,
+          })),
+          total,
+          page: input.page,
+          pageSize: input.pageSize,
+          pageCount: Math.max(1, Math.ceil(total / input.pageSize)),
+          progress: byPart.map(row => ({
+            part: row.part,
+            waiting: Number(row.waiting),
+            total: Number(row.total),
+          })),
+        };
+      }),
+    /**
+     * Writes a разбор and nothing else.
+     *
+     * `updateTask` exists and does more, which is exactly why it is the wrong
+     * tool here: it wants a topic, a slug and a source year for a task that
+     * came from a bank carrying none of them, and it rewrites the statement
+     * and the answer on the way past. An editor writing explanations should
+     * not be able to damage the задание they are explaining.
+     */
+    saveSolution: adminProcedure
+      .input(
+        z.object({
+          taskId: z.number().int().positive(),
+          solutionMarkdown: z.string().trim().min(10).max(20_000),
+          steps: z
+            .array(
+              z.object({
+                title: z.string().trim().min(2).max(180),
+                bodyMarkdown: z.string().trim().min(3).max(6_000),
+              }),
+            )
+            .max(12)
+            .default([]),
+          hints: z
+            .array(
+              z.object({
+                title: z.string().trim().min(2).max(160),
+                bodyMarkdown: z.string().trim().min(3).max(4_000),
+              }),
+            )
+            .max(6)
+            .default([]),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { db, trackId } = await getMathTrack();
+        const [task] = await db
+          .select({ id: tasks.id, contentVersion: tasks.contentVersion })
+          .from(tasks)
+          .where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt)))
+          .limit(1);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+
+        const timestamp = Date.now();
+        await db
+          .update(tasks)
+          .set({
+            solutionMarkdown: input.solutionMarkdown.trim(),
+            contentVersion: task.contentVersion + 1,
+            updatedAt: timestamp,
+          })
+          .where(eq(tasks.id, input.taskId));
+
+        await db.delete(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, input.taskId));
+        await db.delete(taskHints).where(eq(taskHints.taskId, input.taskId));
+        if (input.steps.length) {
+          await db.insert(taskSolutionSteps).values(
+            input.steps.map((step, index) => ({
+              taskId: input.taskId,
+              title: step.title,
+              bodyMarkdown: step.bodyMarkdown,
+              sortOrder: index + 1,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            })),
+          );
+        }
+        if (input.hints.length) {
+          await db.insert(taskHints).values(
+            input.hints.map((hint, index) => ({
+              taskId: input.taskId,
+              title: hint.title,
+              bodyMarkdown: hint.bodyMarkdown,
+              sortOrder: index + 1,
+              createdAt: timestamp,
+              updatedAt: timestamp,
+            })),
+          );
+        }
+        await recordTaskEvent(db, input.taskId, ctx.user.id, "updated", "Разбор написан или обновлён.");
+        return { taskId: input.taskId, steps: input.steps.length, hints: input.hints.length };
       }),
     archiveTask: adminProcedure.input(taskLifecycleInput).mutation(async ({ ctx, input }) => {
       const { db, trackId } = await getMathTrack();

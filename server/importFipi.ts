@@ -33,6 +33,7 @@ import {
   taskVisuals,
   tasks,
 } from "../drizzle/schema";
+import { SOLUTION_PLACEHOLDER } from "@shared/const";
 import { getDb } from "./db";
 import { storagePut } from "./storage";
 
@@ -55,8 +56,7 @@ const GEOMETRY_PAIR_KIM = "23/25";
 /** Bucket for everything the classifier could not resolve. */
 const UNSORTED_KIM = "0";
 
-const SOLUTION_PLACEHOLDER =
-  "_Разбор ещё не написан._\n\nЗадание импортировано из открытого банка ФИПИ, который не публикует решения. Добавьте разбор через редактор.";
+
 
 type ClassifiedTask = {
   guid: string;
