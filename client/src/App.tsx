@@ -20,6 +20,7 @@ import AdminTheory from "./pages/AdminTheory";
 import TheoryVersionCompare from "./pages/TheoryVersionCompare";
 import AdminPromos from "./pages/AdminPromos";
 import { ExamTrackLanding, ExamTracks, SubjectCatalog } from "./pages/CatalogRoutes";
+import Progress from "./pages/Progress";
 import { VariantDetail, Variants } from "./pages/Variants";
 import VariantSolve from "./pages/VariantSolve";
 import SettingsPage from "./pages/SettingsPage";
@@ -41,6 +42,7 @@ function Router() {
       <Route path={"/variants/:slug/solve"} component={VariantSolve} />
       <Route path={"/variants/session/:entropy/solve"} component={VariantSolve} />
       <Route path={"/theory"}>{() => <Redirect to="/bank" />}</Route>
+      <Route path={"/progress"}>{() => <RequireAuth><Progress /></RequireAuth>}</Route>
       <Route path={"/workspace"} component={Workspace} />
       <Route path={"/settings"} component={SettingsPage} />
       <Route path={"/practice"}>{() => <Redirect to="/bank" />}</Route>

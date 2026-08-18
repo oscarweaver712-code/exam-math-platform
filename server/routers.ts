@@ -30,7 +30,7 @@ import {
 import { checkPartOneAnswer } from "./answerValidation";
 import { checkAnswerWithFipi } from "./fipiOracle";
 import { canChooseInitialRole, isPartOneAutoCheckEligible } from "./learningPolicy";
-import { aggregateProgress } from "./progress";
+import { aggregateByNumber, aggregateProgress } from "./progress";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -712,11 +712,60 @@ export const appRouter = router({
         .from(taskAttempts)
         .innerJoin(tasks, eq(taskAttempts.taskId, tasks.id))
         .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
-        .innerJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
-        .innerJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
+        // The topic is optional: the ФИПИ bank arrives tagged by КЭС and exam
+        // number, not by our curriculum, so an inner join here would drop every
+        // attempt a learner has ever made in the bank — which is all of them.
+        .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
+        .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
         .where(and(eq(taskAttempts.userId, ctx.user.id), eq(tasks.examTrackId, track.id)))
         .orderBy(desc(taskAttempts.submittedAt));
-      return aggregateProgress(attempts);
+      return aggregateProgress(
+        attempts.map(attempt => ({ ...attempt, topic: attempt.topic ?? "Без темы" })),
+      );
+    }),
+    byNumber: protectedProcedure.query(async ({ ctx }) => {
+      const track = await getOgeTrack();
+      const db = await requireDb();
+      const [totals, attempts] = await Promise.all([
+        db
+          .select({
+            kimNumber: examTaskTypes.kimNumber,
+            title: examTaskTypes.title,
+            part: examTaskTypes.part,
+            sortOrder: examTaskTypes.sortOrder,
+            total: sql<number>`COUNT(${tasks.id})`,
+          })
+          .from(examTaskTypes)
+          .leftJoin(
+            tasks,
+            and(eq(tasks.examTaskTypeId, examTaskTypes.id), eq(tasks.status, "published")),
+          )
+          .where(eq(examTaskTypes.examTrackId, track.id))
+          .groupBy(
+            examTaskTypes.id,
+            examTaskTypes.kimNumber,
+            examTaskTypes.title,
+            examTaskTypes.part,
+            examTaskTypes.sortOrder,
+          ),
+        db
+          .select({
+            taskId: taskAttempts.taskId,
+            submittedAt: taskAttempts.submittedAt,
+            status: taskAttempts.checkStatus,
+            kimNumber: examTaskTypes.kimNumber,
+            taskType: examTaskTypes.title,
+          })
+          .from(taskAttempts)
+          .innerJoin(tasks, eq(taskAttempts.taskId, tasks.id))
+          .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+          .where(and(eq(taskAttempts.userId, ctx.user.id), eq(tasks.examTrackId, track.id)))
+          .orderBy(desc(taskAttempts.submittedAt)),
+      ]);
+      return aggregateByNumber(
+        attempts.map(attempt => ({ ...attempt, topic: "" })),
+        totals.map(row => ({ ...row, total: Number(row.total) })),
+      );
     }),
   }),
   admin: router({
