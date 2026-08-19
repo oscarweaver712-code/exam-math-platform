@@ -82,10 +82,12 @@ def _circles(sheet: Sheet) -> list[float]:
         return []
 
     radii: list[float] = []
-    # A faint circle leaves far less ink than a filled figure, and the paper
-    # eats what crosses it, so the size filter is loose: what actually decides
-    # is the square box and the half-cell the compass was set to.
-    for blob in _ink_blobs(sheet, minimum=15, gap=8):
+    # The size filter stays tight. Loosening it to 15 pixels on the theory that
+    # the square box and the half-cell snap would catch the rest cost three
+    # rejected candidates on 19.08.2026 and confirmed none: a circle cut into
+    # arcs by the paper leaves fragments that pass both tests and are not the
+    # circle. What is needed here is a reader for arcs, not a wider net.
+    for blob in _ink_blobs(sheet, minimum=60, gap=8):
         xs = [x for x, _ in blob]
         ys = [y for _, y in blob]
         width, height = max(xs) - min(xs), max(ys) - min(ys)
