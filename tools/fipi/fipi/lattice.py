@@ -328,6 +328,111 @@ def _maximal(segments: set[tuple[tuple[int, int], tuple[int, int]]]) -> set:
     return set(kept)
 
 
+def _line(segment: tuple[tuple[int, int], tuple[int, int]]) -> tuple[int, int, int]:
+    """Key of the infinite line a segment lies on, direction plus offset."""
+    (ax, ay), (bx, by) = segment
+    dx, dy = bx - ax, by - ay
+    step = math.gcd(abs(dx), abs(dy)) or 1
+    dx, dy = dx // step, dy // step
+    if (dx, dy) < (0, 0):
+        dx, dy = -dx, -dy
+    return (dx, dy, ax * dy - ay * dx)
+
+
+def _on_line(point: tuple[int, int], line: tuple[int, int, int]) -> bool:
+    dx, dy, offset = line
+    return point[0] * dy - point[1] * dx == offset
+
+
+def _components(sides: set) -> list[set]:
+    """Sides grouped into connected pieces of the drawing."""
+    parent: dict[tuple[int, int], tuple[int, int]] = {}
+
+    def root(point: tuple[int, int]) -> tuple[int, int]:
+        parent.setdefault(point, point)
+        while parent[point] != point:
+            parent[point] = parent[parent[point]]
+            point = parent[point]
+        return point
+
+    for a, b in sides:
+        ra, rb = root(a), root(b)
+        if ra != rb:
+            parent[ra] = rb
+    groups: dict[tuple[int, int], set] = {}
+    for side in sides:
+        groups.setdefault(root(side[0]), set()).add(side)
+    return list(groups.values())
+
+
+def _settle(sides: set, drawn: set) -> set:
+    """Drop what the paper drew rather than the pen.
+
+    A side lying along a lattice line is only visible as a thickening of that
+    line, and the line runs the whole way across the picture, so the reading
+    overshoots: the base of a triangle comes back three times over, as every
+    stretch of the row that happens to look thick enough. Three cleanups, each
+    of them something a simple closed figure cannot contain:
+
+    * **Two sides on one line.** A polygon never puts two of its sides on the
+      same straight line, so the line is paper. Where exactly two other sides
+      end on it, that pair is the real side and the rest is the row it sits on;
+      where they do not, nothing on that line is trusted.
+    * **A stub at a fork.** Three sides meeting at a point is not a polygon
+      either. When one of them lies along a lattice line and dead-ends, it is
+      the line showing through.
+    * **A piece too small to be a figure.** Fewer than three corners cannot
+      close, so a lone stroke along a lattice line is a grid line rather than a
+      drawing. A lone slanted stroke is kept: a trapezoid whose both bases run
+      along the paper arrives exactly like that, and its bases are restored by
+      joining the loose ends.
+    """
+    settled = set(sides)
+
+    lines: dict[tuple[int, int, int], list] = {}
+    for side in settled:
+        lines.setdefault(_line(side), []).append(side)
+    for line, group in lines.items():
+        if len(group) < 2:
+            continue
+        corners = sorted({
+            point
+            for side in settled
+            if _line(side) != line
+            for point in side
+            if _on_line(point, line)
+        })
+        settled.difference_update(group)
+        if len(corners) == 2 and (tuple(corners) in drawn or tuple(reversed(corners)) in drawn):
+            settled.add(tuple(corners))
+
+    while True:
+        degree: dict[tuple[int, int], int] = {}
+        for a, b in settled:
+            degree[a] = degree.get(a, 0) + 1
+            degree[b] = degree.get(b, 0) + 1
+        stubs = {
+            side
+            for side in settled
+            if _line(side)[:2] in ((1, 0), (0, 1))
+            and min(degree[side[0]], degree[side[1]]) == 1
+            and max(degree[side[0]], degree[side[1]]) >= 3
+        }
+        if not stubs:
+            break
+        settled -= stubs
+
+    for piece in _components(settled):
+        if len({point for side in piece for point in side}) >= 3:
+            continue
+        # A lone stroke along a lattice line is the line; a lone slanted one is
+        # a real side whose neighbours were swallowed by the paper, and the
+        # loose ends still have to be joined up.
+        if all(_line(side)[:2] in ((1, 0), (0, 1)) for side in piece):
+            settled -= piece
+    return settled
+
+
 def read_figure(sheet: Sheet, max_nodes: int = 220, tolerance: int = 0) -> Figure | None:
     """Recover the drawn outline as lattice coordinates.
 
@@ -353,7 +458,9 @@ def read_figure(sheet: Sheet, max_nodes: int = 220, tolerance: int = 0) -> Figur
     if not drawn:
         return None
 
-    sides = _maximal(drawn)
+    sides = _settle(_maximal(drawn), drawn)
+    if not sides:
+        return None
     degree: dict[tuple[int, int], int] = {}
     for a, b in sides:
         degree[a] = degree.get(a, 0) + 1

@@ -82,7 +82,10 @@ def _circles(sheet: Sheet) -> list[float]:
         return []
 
     radii: list[float] = []
-    for blob in _ink_blobs(sheet, minimum=60, gap=8):
+    # A faint circle leaves far less ink than a filled figure, and the paper
+    # eats what crosses it, so the size filter is loose: what actually decides
+    # is the square box and the half-cell the compass was set to.
+    for blob in _ink_blobs(sheet, minimum=15, gap=8):
         xs = [x for x, _ in blob]
         ys = [y for _, y in blob]
         width, height = max(xs) - min(xs), max(ys) - min(ys)
