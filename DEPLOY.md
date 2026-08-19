@@ -118,6 +118,21 @@ railway ssh -- node /data/import/apply-numbers.mjs \
 railway ssh -- node /data/import/apply-numbers.mjs --tasks /data/import/out/tasks.jsonl
 ```
 
+Так же точечно правятся условия, когда сборщик научился читать то, чего не
+читал раньше: ФИПИ рисует часть условий картинкой, и пока парсер узнавал не все
+её виды, часть условий лежала с дырой. Скрипт переписывает только условие,
+общий текст группы и лишние строки галереи; ключи и разборы не трогает:
+
+```bash
+railway volume files --volume school-911-volume upload --overwrite \
+  tools/db/apply-statements.mjs /import/apply-statements.mjs
+railway volume files --volume school-911-volume upload --overwrite \
+  tools/fipi/out/tasks.jsonl /import/out/tasks.jsonl
+railway ssh -- node /data/import/apply-statements.mjs \
+  --tasks /data/import/out/tasks.jsonl --dry-run
+railway ssh -- node /data/import/apply-statements.mjs --tasks /data/import/out/tasks.jsonl
+```
+
 Сборщик должен работать из сети, откуда виден `oge.fipi.ru`. С Railway он
 недоступен: сервера зарубежные, и соединение отваливается по таймауту.
 Подробности — в [tools/fipi/README.md](tools/fipi/README.md).
