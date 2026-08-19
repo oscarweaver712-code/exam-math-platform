@@ -17,7 +17,9 @@ from fipi.classify import AMBIGUOUS, CERTAIN, classify  # noqa: E402
 from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi import parse  # noqa: E402
+from fipi.paper import solve_paper  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
+from fipi.tyres import solve_tyres  # noqa: E402
 from fipi.practical import numbers_for_group  # noqa: E402
 from fipi.hints import Hint, match as match_hints  # noqa: E402
 from fipi.lattice import Sheet, read_figure  # noqa: E402
@@ -421,6 +423,20 @@ class FormulaTests(unittest.TestCase):
             "14",
         )
 
+    def test_one_description_can_cover_two_letters(self) -> None:
+        # «где $d_1$ и $d_2$ — длины диагоналей»: the dash follows the second
+        # letter, and the first is left with no description at all. Then the
+        # unknown cannot be picked by words, so the statement names it —
+        # «найдите длину диагонали $d_1$».
+        statement = (
+            "Площадь четырёхугольника можно вычислить по формуле "
+            "$S=\\frac{d_1d_2\\sin \\text{α}}{2}$, где $d_1$ и $d_2$ — длины "
+            "диагоналей четырёхугольника, $\\text{α}$ — угол между диагоналями. "
+            "Пользуясь этой формулой, найдите длину диагонали $d_1$, если "
+            "$d_2=16$, $\\sin \\text{α}=\\frac{5}{8}$, a $S=45$."
+        )
+        self.assertEqual(solve_formula(statement), "9")
+
     def test_ignores_a_statement_without_a_formula(self) -> None:
         self.assertIsNone(solve_formula("Найдите площадь треугольника со стороной 5."))
 
@@ -442,6 +458,39 @@ class ProbabilityTests(unittest.TestCase):
             "того, что случайно выбранная в этом магазине ручка будет красной или синей."
         )
         self.assertEqual(solve_probability(statement), "0.5")
+
+    def test_the_numeral_agrees_with_the_count(self) -> None:
+        # «165 ручек», «144 ручки», «84 ручки, из них» — one shape, three
+        # endings and two ways of opening the list.
+        for opening in ("144 ручки:", "144 ручки, из них"):
+            statement = (
+                f"В магазине канцтоваров продаётся {opening} 30 красных, 24 зелёных, "
+                "18 фиолетовых, остальные синие и чёрные, их поровну. Найдите вероятность "
+                "того, что случайно выбранная в этом магазине ручка будет синей или чёрной."
+            )
+            self.assertEqual(solve_probability(statement), "0.5", opening)
+
+    def test_a_country_the_question_rules_out(self) -> None:
+        # «не из России» asks for the complement, and the bank writes both.
+        statement = (
+            "В лыжных гонках участвуют 13 спортсменов из России, 2 спортсмена "
+            "из Норвегии и 5 спортсменов из Швеции. Порядок, в котором спортсмены "
+            "стартуют, определяется жребием. Найдите вероятность того, что первым "
+            "будет стартовать спортсмен {}."
+        )
+        self.assertEqual(solve_probability(statement.format("не из России")), "0.35")
+        self.assertEqual(solve_probability(statement.format("из России")), "0.65")
+
+    def test_a_coin_already_thrown(self) -> None:
+        # The throw the question names does not matter: 20 throws with 9 heads
+        # leave 11 tails, and any one of the 20 is equally likely to be one.
+        self.assertEqual(
+            solve_probability(
+                "Монету бросили 20 раз. Известно, что орёл выпал 9 раз. Найдите "
+                "вероятность того, что при десятом по счёту броске выпала решка."
+            ),
+            "0.55",
+        )
 
     def test_counts_written_as_words(self) -> None:
         self.assertEqual(
@@ -958,3 +1007,164 @@ class HintTests(unittest.TestCase):
         hints = [Hint("1", "15", "Тип 15 № 1 Найдите площадь. Ответ: 3", "3")]
         task = {"guid": "G", "oge_number": 15, "statement_text": "Найдите площадь."}
         self.assertEqual(match_hints([task], hints), {})
+
+
+class TyreScenarioTests(unittest.TestCase):
+    """The practical block's tyre text: five questions on three numbers."""
+
+    INTRO = (
+        "Автомобильное колесо представляет из себя металлический диск "
+        "с установленной на него резиновой шиной. Первое число означает ширину "
+        "шины в миллиметрах. Второе число — высота боковины шины H в процентах "
+        "от ширины шины. За буквой R следует диаметр диска d в дюймах "
+        "(в одном дюйме 25,4 мм). Завод производит легковые автомобили "
+        "определённой модели и устанавливает на них колёса с шинами 185/70 R14."
+    )
+    TABLE = (
+        "Завод допускает установку шин с другими маркировками.\n\n"
+        "| Ширина шины (мм) | Диаметр диска (дюймы) | Диаметр диска (дюймы) |\n"
+        "|---|---|---|\n"
+        "| Ширина шины (мм) | 14 | 15 |\n"
+        "| 185 | 185/70 | 185/65 |\n"
+        "| 195 | — | 195/65 |\n\n"
+    )
+
+    def task(self, statement: str) -> dict:
+        return {"group_intro": self.INTRO, "statement_text": statement}
+
+    def test_the_table_is_read_by_the_disk_column(self) -> None:
+        # 195 is only allowed on a 15-inch disk, so 14 inches leaves 185 alone.
+        question = self.TABLE + (
+            "Шины какой наибольшей ширины можно устанавливать на автомобиль, "
+            "если диаметр диска равен 14 дюймам? Ответ дайте в миллиметрах."
+        )
+        self.assertEqual(solve_tyres(self.task(question)), "185")
+
+    def test_the_sidewall_is_a_percentage_of_the_width(self) -> None:
+        self.assertEqual(
+            solve_tyres(self.task(
+                "Сколько миллиметров составляет высота боковины шины, "
+                "имеющей маркировку 225/40 R18?"
+            )),
+            "90",
+        )
+
+    def test_the_factory_wheel_comes_from_the_shared_text(self) -> None:
+        # 14 · 25,4 + 2 · 185 · 0,70 — the question never names the tyre.
+        self.assertEqual(
+            solve_tyres(self.task(
+                "Найдите диаметр колеса автомобиля, выходящего с завода. "
+                "Ответ дайте в миллиметрах."
+            )),
+            "614.6",
+        )
+
+    def test_a_replacement_is_compared_against_the_factory_wheel(self) -> None:
+        self.assertEqual(
+            solve_tyres(self.task(
+                "На сколько миллиметров увеличится диаметр колеса, если заменить "
+                "колёса, установленные на заводе, колёсами с шинами 195/60 R15?"
+            )),
+            "0.4",
+        )
+
+    def test_the_mileage_question_is_the_diameter_question(self) -> None:
+        # Пробег за оборот — πD, so π cancels out of the ratio.
+        self.assertEqual(
+            solve_tyres(self.task(
+                "На сколько процентов увеличится пробег автомобиля при одном "
+                "обороте колеса, если заменить колёса, установленные на заводе, "
+                "колёсами с шинами 195/70 R14? Результат округлите до десятых."
+            )),
+            "2.3",
+        )
+
+    def test_another_scenario_is_declined(self) -> None:
+        self.assertIsNone(solve_tyres({"group_intro": "Хозяин строит баню.", "statement_text": "?"}))
+
+
+class PaperScenarioTests(unittest.TestCase):
+    """А0 is one square metre and every cut halves it — that fixes everything."""
+
+    INTRO = (
+        "Общепринятые форматы листов бумаги обозначают буквой А и цифрой: А0, А1, "
+        "А2 и так далее. Лист формата А0 имеет форму прямоугольника площадью "
+        "1 кв. м. Отношение большей стороны к меньшей одно и то же."
+    )
+
+    def task(self, statement: str) -> dict:
+        return {"group_intro": self.INTRO, "statement_text": statement}
+
+    def test_sheets_of_a_smaller_format(self) -> None:
+        self.assertEqual(
+            solve_paper(self.task("Сколько листов формата А4 получится из одного листа формата А1?")),
+            "8",
+        )
+
+    def test_area_in_square_centimetres(self) -> None:
+        self.assertEqual(
+            solve_paper(self.task(
+                "Найдите площадь листа формата А3. Ответ дайте в квадратных сантиметрах."
+            )),
+            "1250",
+        )
+
+    def test_a_side_rounded_to_a_multiple_of_ten(self) -> None:
+        # ФИПИ's own confirmed key for А0 is 840, not the ISO table's 841.
+        self.assertEqual(
+            solve_paper(self.task(
+                "Найдите ширину листа бумаги формата А0. Ответ дайте в миллиметрах "
+                "и округлите до ближайшего целого числа, кратного 10."
+            )),
+            "840",
+        )
+
+    def test_the_ratio_is_the_same_for_every_format(self) -> None:
+        self.assertEqual(
+            solve_paper(self.task(
+                "Найдите отношение длины меньшей стороны листа формата А4 к большей. "
+                "Ответ округлите до десятых."
+            )),
+            "0.7",
+        )
+
+    def test_a_pack_weighs_its_area(self) -> None:
+        # 500 листов А5 — это 500/32 кв. м бумаги по 80 г.
+        self.assertEqual(
+            solve_paper(self.task(
+                "Бумагу формата А5 упаковали в пачки по 500 листов. Найдите массу "
+                "пачки, если масса бумаги площадью 1 кв. м равна 80 г. "
+                "Ответ дайте в граммах."
+            )),
+            "1250",
+        )
+
+    def test_the_font_scales_with_the_side(self) -> None:
+        self.assertEqual(
+            solve_paper(self.task(
+                "Размер (высота) типографского шрифта измеряется в пунктах. Какой "
+                "высоты нужен шрифт (в пунктах), чтобы текст был расположен на листе "
+                "формата А3 так же, как этот же текст, напечатанный шрифтом высотой "
+                "15 пунктов на листе формата А4? Размер шрифта округляется до целого."
+            )),
+            "21",
+        )
+
+    def test_formats_are_matched_to_the_numbered_sheets(self) -> None:
+        statement = (
+            "В таблице даны размеры четырёх листов, имеющих форматы А2, А3, А5 и А6.\n\n"
+            "| Номер листа | Длина (мм) | Ширина (мм) |\n|---|---|---|\n"
+            "| 1 | 210 | 148 |\n| 2 | 594 | 420 |\n| 3 | 148 | 105 |\n| 4 | 420 | 297 |\n\n"
+            "Установите соответствие между форматами и номерами листов.\n\nА2 А3 А5 А6"
+        )
+        self.assertEqual(solve_paper(self.task(statement)), "2413")
+
+    def test_a_sheet_that_fits_no_format_is_left_alone(self) -> None:
+        # Better no answer than a guess: a mismatched table is a parsing bug.
+        statement = (
+            "В таблице даны размеры четырёх листов, имеющих форматы А2, А3, А5 и А6.\n\n"
+            "| Номер листа | Длина (мм) | Ширина (мм) |\n|---|---|---|\n"
+            "| 1 | 999 | 148 |\n| 2 | 594 | 420 |\n| 3 | 148 | 105 |\n| 4 | 420 | 297 |\n\n"
+            "Установите соответствие между форматами и номерами листов.\n\nА2 А3 А5 А6"
+        )
+        self.assertIsNone(solve_paper(self.task(statement)))

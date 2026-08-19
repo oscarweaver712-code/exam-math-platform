@@ -23,8 +23,21 @@ from .equations import _coefficients, _roots, _sample
 from .solver import SolveError, _evaluate, _latex_to_python, format_answer
 
 FORMULA_RE = re.compile(r"формул\w*\s*\$(?P<body>[^$]+)\$")
-#: «где $I$ — сила тока (в амперах), $R$ — сопротивление (в омах)»
-WHERE_RE = re.compile(r"\$([^$]+?)\$\s*[—–-]\s*([^,.;]+)")
+#: «где $I$ — сила тока (в амперах), $R$ — сопротивление (в омах)». One
+#: description may cover several letters at once — «где $d_1$ и $d_2$ — длины
+#: диагоналей» — and the letters before the dash are captured as a group so
+#: that each of them gets it. Leave that out and `d_1` is a letter the task
+#: never explains, which makes it unpickable as the unknown.
+WHERE_RE = re.compile(r"((?:\$[^$]+?\$(?:\s*(?:и|,)\s*)?)+)\s*[—–-]\s*([^,.;]+)")
+#: Each `$…$` inside such a group.
+SYMBOL_RE = re.compile(r"\$([^$]+?)\$")
+
+#: «найдите длину диагонали $d_1$» — the statement names the unknown outright,
+#: which beats matching it by the words around it: `d_1` and `d_2` share every
+#: word of their description and only the symbol tells them apart.
+ASK_SYMBOL_RE = re.compile(
+    r"(?:[Нн]айдите|[Оо]пределите|[Вв]ычислите|[Рр]ассчитайте)[^.$]{0,40}?\$([^$=]+?)\$"
+)
 #: A number followed or preceded by the words that name it.
 VALUE_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)")
 
@@ -160,10 +173,11 @@ def solve_formula(statement: str) -> str | None:
     # What each letter means: the lead sentence names the left-hand side, the
     # «где …» clause names the rest.
     descriptions: dict[str, set[str]] = {target: _stems(text[: formula.start()])}
-    for symbol_raw, phrase in WHERE_RE.findall(text[formula.end() :]):
-        symbol = _symbol(symbol_raw)
-        if symbol:
-            descriptions.setdefault(symbol, set()).update(_stems(phrase))
+    for symbols_raw, phrase in WHERE_RE.findall(text[formula.end() :]):
+        for symbol_raw in SYMBOL_RE.findall(symbols_raw):
+            symbol = _symbol(symbol_raw)
+            if symbol:
+                descriptions.setdefault(symbol, set()).update(_stems(phrase))
 
     question = text[formula.end() :]
     marker = re.search(r"[Пп]ользуясь|Скольким|Найдите|Определите|Вычислите|[Рр]ассчитайте", question)
@@ -174,8 +188,14 @@ def solve_formula(statement: str) -> str | None:
     # letter matters: «рассчитайте стоимость колодца из 20 колец» mentions the
     # unknown's own words, and without this the 20 is read as the cost.
     asked = None
+    named = ASK_SYMBOL_RE.search(question)
+    if named:
+        symbol = _symbol(named.group(1))
+        if symbol in {target, *names}:
+            asked = symbol
+
     ask = re.search(r"(?:[Нн]айдите|[Оо]пределите|[Вв]ычислите|[Рр]ассчитайте|Скольким)\s+([^,.0-9]{3,60})", question)
-    if ask:
+    if asked is None and ask:
         wanted_stems = _stems(ask.group(1))
         scored = {
             symbol: len(stems & wanted_stems) for symbol, stems in descriptions.items()

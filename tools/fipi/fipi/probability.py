@@ -38,8 +38,11 @@ def _format(value: Fraction) -> str:
 
 
 #: «остальные ... поровну»: the leftover splits evenly between two colours.
+#: The count agrees with the numeral — «продаётся 144 ручки», «165 ручек» — and
+#: the list opens either with a colon or with «, из них».
 _SPLIT_RE = re.compile(
-    rf"продаётся\s+{NUM}\s+ручек:\s*{NUM}\s+(\w+),\s*{NUM}\s+(\w+),\s*{NUM}\s+(\w+),"
+    rf"продаётся\s+{NUM}\s+руч\w*\s*[:,]\s*(?:из\s+них\s+)?"
+    rf"{NUM}\s+(\w+),\s*{NUM}\s+(\w+),\s*{NUM}\s+(\w+),"
     r"\s*остальные\s+(\w+)\s+и\s+(\w+),\s*их\s+поровну",
     re.IGNORECASE,
 )
@@ -149,23 +152,28 @@ def _second_draw(text: str) -> Fraction | None:
     return (drawn - 1) / (total - 1)
 
 
+#: «первым будет стартовать спортсмен из Швеции» — and, in a fifth of the
+#: family, «спортсмен не из России», which asks for the complement.
+_START_RE = re.compile(r"стартовать\s+спортсмен\s+(не\s+)?из")
+
+
 def _by_country(text: str) -> Fraction | None:
     """«7 спортсменов из России, 1 из Швеции и 2 из Норвегии … из Швеции»."""
     parts = re.findall(rf"{NUM}\s+спортсмен\w*\s+из\s+([А-Яа-яЁё]+)", text)
-    marker = "стартовать спортсмен из"
-    if len(parts) < 2 or marker not in text:
+    marker = _START_RE.search(text)
+    if len(parts) < 2 or not marker:
         return None
     counts: dict[str, Fraction] = {}
     for number, country in parts:
         counts[_stem(country)] = counts.get(_stem(country), Fraction(0)) + _n(number)
     # «из Норвегии или Швеции» names two countries, so the tail is read whole
     # rather than taking the first word after «из».
-    asked = {_stem(word) for word in re.findall(r"[А-Яа-яЁё]+", text.split(marker, 1)[1])}
+    asked = {_stem(word) for word in re.findall(r"[А-Яа-яЁё]+", text[marker.end():])}
     wanted = sum((count for stem, count in counts.items() if stem in asked), Fraction(0))
     total = sum(counts.values())
     if not wanted or not total:
         return None
-    return wanted / total
+    return 1 - wanted / total if marker.group(1) else wanted / total
 
 
 def _puzzles(text: str) -> Fraction | None:
@@ -267,6 +275,11 @@ _RULES: list[tuple[re.Pattern[str], object]] = [
     # «Вероятность того, что … плохо …, равна 0,02 … пишет хорошо»
     (re.compile(rf"пишет\s+плохо.*?равна\s+{NUM}.*?пишет\s+хорошо", re.IGNORECASE | re.DOTALL),
      lambda g: 1 - _n(g[0])),
+    # «Монету бросили 20 раз. Орёл выпал 9 раз … при десятом броске решка».
+    # The question names a particular throw, but the answer does not depend on
+    # which: what is asked is the share of tails among the throws made.
+    (re.compile(rf"Монету бросили\s+{NUM}\s+раз.*?орёл выпал\s+{NUM}\s+раз.*?решка", re.IGNORECASE | re.DOTALL),
+     lambda g: (_n(g[0]) - _n(g[1])) / _n(g[0])),
     # «свободно 10 машин: 5 чёрных, 1 жёлтая и 4 зелёных … жёлтое такси»
     (re.compile(rf"свободно\s+{NUM}\s+машин:\s*{NUM}\s+ч[её]рн\w*,\s*{NUM}\s+ж[её]лт\w*\s+и\s+{NUM}\s+зел[её]н\w*.*?ж[её]лтое", re.IGNORECASE | re.DOTALL),
      lambda g: _n(g[2]) / _n(g[0])),

@@ -25,11 +25,13 @@ from .practical import assign as assign_practical_numbers
 from .equations import solve_equation
 from .formulas import solve_formula
 from .geometry import solve_geometry
+from .paper import solve_paper
 from .physics import solve_physics
 from .probability import solve_probability
 from .sequences import solve_sequence
 from .solver import answer_variants, bounded_candidates, solve_statement
 from .squared_paper import solve_squared_paper
+from .tyres import solve_tyres
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE = ROOT / "cache"
@@ -263,6 +265,13 @@ def cmd_solve(args: argparse.Namespace) -> None:
             drawn = solve_squared_paper(task, IMAGES_DIR)
             if drawn:
                 candidates.append((task, drawn))
+                continue
+            # The practical block asks about a text it does not repeat — the
+            # factory wheel is named once, in the shared block — so these two
+            # read the whole record rather than the statement alone.
+            scenario = solve_tyres(task) or solve_paper(task)
+            if scenario is not None:
+                candidates.append((task, answer_variants(scenario)))
                 continue
             answer = (
                 solve_statement(task["statement_text"])
