@@ -42,20 +42,32 @@ PICTURE_FN_RE = re.compile(r"(ShowPicture[A-Za-z0-9]*)\s*\(", re.IGNORECASE)
 FILES_LOCATION_RE = re.compile(r"files_location\s*=\s*['\"]([^'\"]*)['\"]", re.IGNORECASE)
 BARE_PICTURE_RE = re.compile(r"ShowPicture[A-Za-z0-9]*\(\s*['\"]([^'\"/]+?\.(?:png|jpe?g|gif|svg))['\"]", re.IGNORECASE)
 
-#: A formula ФИПИ drew instead of writing. Word exports put such fragments in
-#: `<span style="position:relative;top:3.0pt">` — the vertical nudge that sits a
-#: picture on the text baseline — and write the picture from JavaScript inside
-#: it. Stripping scripts therefore leaves an empty span and a hole in the
-#: sentence: «Диагональ ромба равна 28, а . Найдите площадь». 193 tasks are
-#: affected. The wrapper is an exact signal: across the whole bank only
-#: `innerimg*` fragments are ever wrapped this way, never a diagram.
-INLINE_PICTURE_RE = re.compile(
-    r"<span[^>]*position:\s*relative[^>]*>\s*"
+#: A picture ФИПИ drew where a word belongs. Word exports leave the fragment
+#: as `<span><script>ShowPicture…</script></span>`, and stripping scripts turns
+#: it into a hole in the sentence: «Диагональ ромба равна 28, а . Найдите
+#: площадь». The same call also writes ordinary diagrams, so the wrapper alone
+#: decides nothing — see `_is_inline_picture` for what does.
+PICTURE_CALL_RE = re.compile(
+    r"(?P<span><span(?P<attrs>[^>]*)>\s*)?"
     r"<script\b[^>]*>\s*ShowPicture[A-Za-z0-9]*\(\s*"
-    r"['\"]([^'\"]+?\.(?:png|jpe?g|gif|svg))['\"][^)]*\)\s*;?\s*</script>\s*"
-    r"</span>",
+    r"['\"](?P<src>[^'\"]+?\.(?:png|jpe?g|gif|svg))['\"][^)]*\)\s*;?\s*</script>"
+    r"(?(span)\s*</span>)",
     re.IGNORECASE | re.DOTALL,
 )
+
+#: Where a line of text ends. Used to read what stands next to a picture.
+BLOCK_EDGE_RE = re.compile(
+    r"</?(?:p|td|th|tr|table|div|li|ul|ol|br|h[1-6])\b[^>]*>", re.IGNORECASE
+)
+
+#: `position:relative;top:3.0pt` — the vertical nudge that sits a picture on
+#: the text baseline. Only Word exports carry it, and only around a fragment.
+BASELINE_NUDGE_RE = re.compile(r"position:\s*relative", re.IGNORECASE)
+
+#: Word names the pictures it exported from inside a document `innerimg<N>`,
+#: against `xs3qstsrc…` for a picture uploaded as the question's own drawing.
+INNER_IMAGE_RE = re.compile(r"(^|/)innerimg\d*\.", re.IGNORECASE)
+
 
 #: Position of a question inside its group, e.g. `title="Задание 3 в B64540"`.
 GROUP_RE = re.compile(r'class="number-in-group"\s+title="Задание\s+(\d+)\s+в\s+(\w+)\s*"', re.IGNORECASE)
@@ -132,6 +144,8 @@ class Task:
     #: Shared context of the group, attached during the group pass.
     group_intro: str = ""
     group_images: list[str] = field(default_factory=list)
+    #: Subset of `group_images` drawn inside the shared text.
+    group_inline_images: list[str] = field(default_factory=list)
     #: How the answer is entered, when the form bounds it to a small set:
     #: `{"kind": "select_one", "options": ["1","2","3"]}`,
     #: `{"kind": "select_many", "slots": 3}`,
@@ -268,18 +282,96 @@ def _render_tables(fragment: str) -> str:
     return text
 
 
+def _visible_neighbours(fragment: str, start: int, end: int) -> tuple[str, str]:
+    """Text standing left and right of a picture inside its own line."""
+    left = 0
+    for edge in BLOCK_EDGE_RE.finditer(fragment, 0, start):
+        left = edge.end()
+    edge = BLOCK_EDGE_RE.search(fragment, end)
+    right = edge.start() if edge else len(fragment)
+
+    def visible(part: str) -> str:
+        # Script bodies are code, not text: a neighbouring ShowPicture call
+        # would otherwise read as a word standing next to this one.
+        part = SCRIPT_RE.sub(" ", part)
+        part = STYLE_RE.sub(" ", part)
+        part = TAG_RE.sub(" ", part)
+        # `&nbsp;` is spacing, not a word; a picture padded with it is alone.
+        return html.unescape(part).replace("\xa0", " ").strip()
+
+    return visible(fragment[left:start]), visible(fragment[end:right])
+
+
+def _is_inline_picture(fragment: str, match: re.Match) -> bool:
+    """True when this picture belongs in the sentence, not in the gallery.
+
+    Three signals, each checked against the whole bank:
+
+    1. **The baseline nudge.** `position:relative` wraps 541 fragments and not
+       one diagram.
+    2. **Words on the same line.** «на прямой отмечены числа ▩ и ▩» — a picture
+       with text on both sides is part of the sentence whatever it is called.
+       This is how the 15×16 pictures of a number get in, since ФИПИ saves them
+       under the ordinary `xs3qstsrc…` name.
+    3. **A Word inner image in a span.** `innerimg*` inside a wrapper is always
+       a fragment: across the bank the largest such picture is 65px tall, while
+       the diagrams sharing that name stand outside any span and start at 144px.
+
+    A bare `innerimg*` with no wrapper is left alone deliberately: those are
+    real drawings — the rectangle beside «Найдите площадь прямоугольника».
+    """
+    attrs = match.group("attrs") or ""
+    if match.group("span") and BASELINE_NUDGE_RE.search(attrs):
+        return True
+
+    before, after = _visible_neighbours(fragment, match.start(), match.end())
+    if before or after:
+        return True
+
+    return bool(match.group("span")) and bool(INNER_IMAGE_RE.search(match.group("src")))
+
+
+def _resolve_picture(src: str, base: str) -> str:
+    """A picture path as the gallery stores it, project-relative."""
+    return src if src.lower().startswith("docs/") or not base else f"{base}/{src}"
+
+
+def _picture_base(fragment: str) -> str:
+    """Directory a bare `ShowPicture('name.png')` is relative to."""
+    locations = [value for value in FILES_LOCATION_RE.findall(fragment) if value.strip()]
+    return locations[-1].lstrip("./").rstrip("/") if locations else ""
+
+
 def inline_pictures(fragment: str, template: str) -> str:
     """Put a drawn-in formula back where the sentence expects it.
 
     Called before scripts are stripped, otherwise the only trace left of the
     fragment is an empty span.
     """
-    return INLINE_PICTURE_RE.sub(lambda match: template.format(match.group(1)), fragment)
+    base = _picture_base(fragment)
+
+    def place(match: re.Match) -> str:
+        if not _is_inline_picture(fragment, match):
+            return match.group(0)
+        return template.format(_resolve_picture(match.group("src"), base))
+
+    return PICTURE_CALL_RE.sub(place, fragment)
 
 
 def inline_picture_paths(fragment: str) -> list[str]:
-    """Paths of the formulas drawn inside the running text, in reading order."""
-    return [match.group(1) for match in INLINE_PICTURE_RE.finditer(fragment)]
+    """Paths of the formulas drawn inside the running text, in reading order.
+
+    Project-relative, like `Task.images`: the shared block of a group passes a
+    bare filename and sets `files_location` separately, and an inline path that
+    does not match the gallery entry cannot be taken out of the gallery.
+    """
+    base = _picture_base(fragment)
+    paths = []
+    for match in PICTURE_CALL_RE.finditer(fragment):
+        if not _is_inline_picture(fragment, match):
+            continue
+        paths.append(_resolve_picture(match.group("src"), base))
+    return paths
 
 
 def to_text(fragment: str) -> str:
@@ -473,6 +565,9 @@ class GroupIntro:
     text: str
     html: str
     images: list[str] = field(default_factory=list)
+    #: Subset of `images` drawn inside the shared text — the tyre groups spell
+    #: the width and the sidewall height as pictures mid-sentence.
+    inline_images: list[str] = field(default_factory=list)
 
 
 def parse_group_intro(page_html: str, group_id: str) -> GroupIntro | None:
@@ -502,6 +597,7 @@ def parse_group_intro(page_html: str, group_id: str) -> GroupIntro | None:
         text=to_text(body),
         html=clean_html(body),
         images=_collect_images(block),
+        inline_images=inline_picture_paths(inline_math(body)),
     )
 
 

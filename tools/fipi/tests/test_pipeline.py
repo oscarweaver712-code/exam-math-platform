@@ -187,6 +187,63 @@ class InlineFormulaTests(unittest.TestCase):
         )
         self.assertEqual(parse.inline_picture_paths(self.DIAGRAM), [])
 
+    #: No nudge, no `innerimg` name — but the picture stands between two words,
+    #: so it is part of the sentence: «на прямой отмечены числа ▩ и ▩».
+    IN_SENTENCE = (
+        "<p>На координатной прямой отмечены числа "
+        "<span><script language=\"JavaScript\">"
+        "ShowPictureQ('docs/PROJ/questions/GUID/xs3qstsrcGUID_6_1734423599.png');"
+        "</script></span>&nbsp;и "
+        "<span><script language=\"JavaScript\">"
+        "ShowPictureQ('docs/PROJ/questions/GUID/xs3qstsrcGUID_7_1734423599.png');"
+        "</script></span>.</p>"
+    )
+    #: A Word fragment alone on its line: the equation itself, drawn.
+    ALONE_IN_SPAN = (
+        "<p>Решите уравнение</p><p><span lang=EN-US><script language=\"JavaScript\">"
+        "ShowPictureQ(\"docs/PROJ/questions/GUID/innerimg0.gif\",\"\");"
+        "</script></span></p>"
+    )
+    #: The number line ФИПИ ships as the question's own picture. Same shape as
+    #: the fragment above, and it must stay in the gallery all the same.
+    NUMBER_LINE = (
+        "<p>Какое из чисел отмечено точкой?</p><p><span><script language=\"JavaScript\">"
+        "ShowPictureQ(\"docs/PROJ/questions/GUID/xs3qstsrcGUID_1_1455809602.png\",\"\");"
+        "</script></span></p>"
+    )
+
+    def test_a_picture_between_words_joins_the_sentence(self) -> None:
+        # 80 tasks name their numbers only in 15x16 pictures, and ФИПИ files
+        # those under the ordinary diagram name — the wrapper says nothing.
+        text = to_text(self.IN_SENTENCE)
+        self.assertIn("отмечены числа ![](docs/PROJ/questions/GUID/xs3qstsrcGUID_6", text)
+        self.assertEqual(len(parse.inline_picture_paths(self.IN_SENTENCE)), 2)
+
+    def test_a_word_fragment_in_a_span_is_a_formula_even_when_alone(self) -> None:
+        # «Решите уравнение» followed by nothing is not a task.
+        self.assertIn("![](docs/PROJ/questions/GUID/innerimg0.gif)", to_text(self.ALONE_IN_SPAN))
+
+    #: The shared block of a group names its pictures without a directory and
+    #: sets `files_location` once, above them.
+    SHARED_BLOCK = (
+        "<script>files_location='../../docs/PROJ/docs/DOCGUID/';</script>"
+        "<p>Шина с маркировкой 195/65 R15 имеет ширину "
+        "<span><script language=\"JavaScript\">ShowPicture('inner13.png');</script></span>"
+        " мм.</p>"
+    )
+
+    def test_a_bare_filename_is_resolved_against_files_location(self) -> None:
+        # The gallery stores the full path; an inline path that does not match
+        # it cannot be taken out of the gallery, and the formula shows twice.
+        full = "docs/PROJ/docs/DOCGUID/inner13.png"
+        self.assertEqual(parse.inline_picture_paths(self.SHARED_BLOCK), [full])
+        self.assertIn(f"![]({full})", to_text(self.SHARED_BLOCK))
+
+    def test_a_wrapped_diagram_still_stays_in_the_gallery(self) -> None:
+        # Only the `innerimg` name separates this from the case above.
+        self.assertNotIn("![]", to_text(self.NUMBER_LINE))
+        self.assertEqual(parse.inline_picture_paths(self.NUMBER_LINE), [])
+
 
 class TableTests(unittest.TestCase):
     """The practical block keeps its data in tables; the grid is the task."""

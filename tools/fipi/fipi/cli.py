@@ -108,6 +108,7 @@ def cmd_build(args: argparse.Namespace) -> None:
             if shared:
                 record["group_intro"] = shared["intro_text"]
                 record["group_images"] = shared["images"]
+                record["group_inline_images"] = shared.get("inline_images", [])
                 # The plan belongs to the statement as much as the question
                 # text does; without it the task cannot be answered.
                 record["images"] = sorted(set(record["images"]) | set(shared["images"]))
@@ -192,6 +193,7 @@ def cmd_groups(args: argparse.Namespace) -> None:
                 "intro_text": intro.text,
                 "intro_html": intro.html,
                 "images": intro.images,
+                "inline_images": intro.inline_images,
                 "member_count": sum(1 for task in members if task.group_position is not None),
             }, ensure_ascii=False) + "\n")
             written += 1

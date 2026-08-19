@@ -76,6 +76,8 @@ type ClassifiedTask = {
   group_position: number | null;
   group_intro: string;
   group_images: string[];
+  /** Subset of `group_images` drawn inside the shared text. */
+  group_inline_images?: string[];
   oge_number: number | null;
   oge_title: string;
   url: string;
@@ -223,7 +225,7 @@ function contentTypeFor(file: string): string {
 }
 
 /**
- * Point the statement's inline formulas at our own copies.
+ * Point a text's inline formulas at our own copies.
  *
  * ФИПИ drew part of the condition instead of writing it — «Диагональ ромба
  * равна 28, а ![](…innerimg2.gif). Найдите площадь» — so the picture is a word
@@ -231,18 +233,24 @@ function contentTypeFor(file: string): string {
  * own path in the markdown; here it becomes a stored URL. A picture we do not
  * have locally is dropped rather than left as a broken image, which puts the
  * hole back but never shows the learner a missing-image icon.
+ *
+ * The shared text of a group needs the same pass: the tyre groups spell the
+ * width and the sidewall height as pictures inside their sentence.
  */
-async function inlineStatementImages(task: ClassifiedTask, imagesDir: string): Promise<string> {
-  const inline = task.inline_images ?? [];
-  if (!inline.length) return task.statement_text;
+async function inlineImages(
+  markdown: string,
+  inline: string[],
+  guid: string,
+  imagesDir: string,
+): Promise<string> {
+  if (!inline.length) return markdown;
 
-  let markdown = task.statement_text;
   for (const relPath of Array.from(new Set(inline))) {
-    const localFile = path.join(imagesDir, task.guid, path.basename(relPath));
+    const localFile = path.join(imagesDir, guid, path.basename(relPath));
     let replacement = "";
     if (fs.existsSync(localFile)) {
       const { url } = await storagePut(
-        `fipi/${task.guid}/${path.basename(localFile)}`,
+        `fipi/${guid}/${path.basename(localFile)}`,
         fs.readFileSync(localFile),
         contentTypeFor(localFile),
       );
@@ -270,7 +278,7 @@ async function dropInlineVisuals(
   taskId: number,
   task: ClassifiedTask,
 ): Promise<number> {
-  const inline = task.inline_images ?? [];
+  const inline = [...(task.inline_images ?? []), ...(task.group_inline_images ?? [])];
   if (!inline.length) return 0;
 
   const urls = inline
@@ -355,9 +363,16 @@ async function upsertGroupIntro(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   taskId: number,
   task: ClassifiedTask,
+  imagesDir: string,
 ): Promise<void> {
   if (!task.group_intro.trim()) return;
 
+  const body = await inlineImages(
+    task.group_intro,
+    task.group_inline_images ?? [],
+    task.guid,
+    imagesDir,
+  );
   const title = "Общее условие";
   const existing = await db
     .select({ id: taskAdditionalMaterials.id })
@@ -369,14 +384,14 @@ async function upsertGroupIntro(
   if (existing[0]) {
     await db
       .update(taskAdditionalMaterials)
-      .set({ bodyMarkdown: task.group_intro, updatedAt: timestamp })
+      .set({ bodyMarkdown: body, updatedAt: timestamp })
       .where(eq(taskAdditionalMaterials.id, existing[0].id));
     return;
   }
   await db.insert(taskAdditionalMaterials).values({
     taskId,
     title,
-    bodyMarkdown: task.group_intro,
+    bodyMarkdown: body,
     sortOrder: 0,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -464,7 +479,12 @@ async function main() {
       examTrackId: track.id,
       examTaskTypeId,
       title: titleFor(task),
-      statementMarkdown: await inlineStatementImages(task, imagesDir),
+      statementMarkdown: await inlineImages(
+        task.statement_text,
+        task.inline_images ?? [],
+        task.guid,
+        imagesDir,
+      ),
       answerChoices: task.choices.length
         ? task.choices.map(choice => ({ id: choice.value, label: choice.text }))
         : null,
@@ -521,7 +541,7 @@ async function main() {
       inserted += 1;
     }
 
-    await upsertGroupIntro(db, taskId, task);
+    await upsertGroupIntro(db, taskId, task, imagesDir);
     detached += await dropInlineVisuals(db, taskId, task);
 
     if (args.withImages) {
