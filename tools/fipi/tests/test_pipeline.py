@@ -17,6 +17,7 @@ from fipi.classify import AMBIGUOUS, CERTAIN, classify  # noqa: E402
 from fipi.config import slots_for_kes  # noqa: E402
 from fipi.mathml import inline_math, mathml_to_latex  # noqa: E402
 from fipi import parse  # noqa: E402
+from fipi.bounded import classify as probe_type, probe_candidates  # noqa: E402
 from fipi.paper import solve_paper  # noqa: E402
 from fipi.parse import parse_page, to_text  # noqa: E402
 from fipi.tyres import solve_tyres  # noqa: E402
@@ -1168,3 +1169,54 @@ class PaperScenarioTests(unittest.TestCase):
             "Установите соответствие между форматами и номерами листов.\n\nА2 А3 А5 А6"
         )
         self.assertIsNone(solve_paper(self.task(statement)))
+
+
+class BoundedProbeTests(unittest.TestCase):
+    """Guessing an answer within bounds, for what a solver could not compute."""
+
+    def probe(self, statement: str):
+        return probe_candidates({"statement_text": statement})
+
+    def test_a_percentage_sweeps_zero_to_a_hundred(self) -> None:
+        values = self.probe("Сколько процентов площади участка занимает сарай?")
+        self.assertEqual(values[:3], ["0", "1", "2"])
+        self.assertIn("100", values)
+        self.assertIn("50.5", values)
+        self.assertIn("50,5", values)  # both spellings the sheet accepts
+        # Integers come first, halves after — the cheap guesses lead.
+        self.assertLess(values.index("100"), values.index("0.5"))
+
+    def test_a_count_is_whole_with_no_halves(self) -> None:
+        values = self.probe("Сколько упаковок плитки понадобилось, чтобы выложить дорожки?")
+        self.assertEqual(values[0], "1")
+        self.assertNotIn("1.5", values)
+        self.assertNotIn("1,5", values)
+
+    def test_roubles_are_left_alone(self) -> None:
+        # Thousands of roubles cannot land in a hundred-wide sweep.
+        self.assertIsNone(self.probe(
+            "На сколько рублей покупка дровяной печи обойдётся дешевле электрической?"
+        ))
+
+    def test_the_drawing_is_not_guessed(self) -> None:
+        self.assertIsNone(self.probe(
+            "На клетчатой бумаге изображены два круга. Во сколько раз площадь больше?"
+        ))
+
+    def test_a_matching_answer_is_left_to_its_finite_set(self) -> None:
+        self.assertIsNone(self.probe(
+            "Установите соответствие между массами и номерами печей. "
+            "Перенесите последовательность трёх цифр."
+        ))
+
+    def test_an_exclusion_wins_over_a_type(self) -> None:
+        # «в квадратных метрах» would be an area, but the price in roubles is
+        # the answer, so the exclusion has to be checked first.
+        self.assertIsNone(probe_type(
+            "Плитка укрывает 10 кв. м. Сколько рублей стоила вся плитка?"
+        ))
+
+    def test_kilometres_stay_in_single_digits_of_tens(self) -> None:
+        values = self.probe("Найдите расстояние от деревни до села по прямой в километрах.")
+        self.assertEqual(values[0], "1")
+        self.assertNotIn("40", values)  # trimmed at 35

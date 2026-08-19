@@ -25,6 +25,7 @@ from .practical import assign as assign_practical_numbers
 from .equations import solve_equation
 from .formulas import solve_formula
 from .geometry import solve_geometry
+from .bounded import classify as probe_type, probe_candidates
 from .paper import solve_paper
 from .physics import solve_physics
 from .probability import solve_probability
@@ -59,6 +60,14 @@ def _load_tasks() -> list[dict]:
         sys.exit(f"{TASKS_PATH} not found — run `build` first")
     with TASKS_PATH.open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
+
+
+def _confirmed_guids() -> set[str]:
+    """GUIDs that already carry a confirmed key, so they are not asked again."""
+    if not ANSWERS_PATH.exists():
+        return set()
+    with ANSWERS_PATH.open(encoding="utf-8") as handle:
+        return {json.loads(line)["guid"] for line in handle if line.strip()}
 
 
 # --- commands --------------------------------------------------------------
@@ -239,64 +248,17 @@ def cmd_hints(args: argparse.Namespace) -> None:
         print(f"  №{number}  {count}")
 
 
-def cmd_solve(args: argparse.Namespace) -> None:
-    """Compute the answers we can, then confirm each one with ФИПИ.
 
-    Only confirmed answers are written. A mis-evaluated expression therefore
-    costs one rejected candidate rather than a wrong key in the bank, which is
-    why the solver is allowed to be approximate at the edges.
+def _confirm_candidates(
+    candidates: list[tuple[dict, list[str]]], args: argparse.Namespace
+) -> None:
+    """Send computed candidates to ФИПИ and keep only what it confirms.
 
-    This is solve-then-verify, not search: at most two requests per task, and
-    only for tasks an arithmetic evaluator already answered.
+    Shared by `solve` and `probe`: both compute the answer first and ask the
+    oracle only to confirm it, so a wrong candidate costs a rejection, never a
+    wrong key. Answers already confirmed are skipped, and a candidate ФИПИ has
+    already turned down is not asked again.
     """
-    tasks = _load_tasks()
-    # Candidates found in an outside catalogue. They are proposals like any
-    # other and are only reached where nothing here could work the answer out.
-    hints = load_hints(HINTS_PATH)
-    if hints:
-        print(f"подсказок из внешнего каталога: {len(hints)}")
-
-    candidates: list[tuple[dict, list[str]]] = []
-    for task in tasks:
-        if task["answer_kind"] == "short":
-            # Задание 18 has no numbers in the statement at all: the drawing is
-            # the data, so it is read rather than parsed. It comes first
-            # because every text rule would decline it anyway.
-            drawn = solve_squared_paper(task, IMAGES_DIR)
-            if drawn:
-                candidates.append((task, drawn))
-                continue
-            # The practical block asks about a text it does not repeat — the
-            # factory wheel is named once, in the shared block — so these two
-            # read the whole record rather than the statement alone.
-            scenario = solve_tyres(task) or solve_paper(task)
-            if scenario is not None:
-                candidates.append((task, answer_variants(scenario)))
-                continue
-            answer = (
-                solve_statement(task["statement_text"])
-                or solve_probability(task["statement_text"], task["short_id"])
-                or solve_equation(task["statement_text"], task["short_id"])
-                or solve_formula(task["statement_text"])
-                or solve_geometry(task["statement_text"], task["short_id"])
-                or solve_sequence(task["statement_text"], task["short_id"])
-                or solve_physics(task["statement_text"])
-            )
-            if answer is not None:
-                candidates.append((task, answer_variants(answer)))
-                continue
-            hinted = hints.get(task["guid"])
-            if hinted:
-                candidates.append((task, [variant for value in hinted for variant in answer_variants(value)]))
-            continue
-        if not args.choices:
-            continue
-        options = bounded_candidates(task.get("answer_space") or {})
-        if options:
-            candidates.append((task, options))
-
-    print(f"вычислено кандидатов: {len(candidates)}")
-
     known: dict[str, str] = {}
     if ANSWERS_PATH.exists() and not args.refresh:
         with ANSWERS_PATH.open(encoding="utf-8") as handle:
@@ -384,6 +346,101 @@ def cmd_solve(args: argparse.Namespace) -> None:
 
     print(f"подтверждено {confirmed}, отклонено {rejected}, неясно {unclear} -> {ANSWERS_PATH}")
 
+def cmd_solve(args: argparse.Namespace) -> None:
+    """Compute the answers we can, then confirm each one with ФИПИ.
+
+    Only confirmed answers are written. A mis-evaluated expression therefore
+    costs one rejected candidate rather than a wrong key in the bank, which is
+    why the solver is allowed to be approximate at the edges.
+
+    This is solve-then-verify, not search: at most two requests per task, and
+    only for tasks an arithmetic evaluator already answered.
+    """
+    tasks = _load_tasks()
+    # Candidates found in an outside catalogue. They are proposals like any
+    # other and are only reached where nothing here could work the answer out.
+    hints = load_hints(HINTS_PATH)
+    if hints:
+        print(f"подсказок из внешнего каталога: {len(hints)}")
+
+    candidates: list[tuple[dict, list[str]]] = []
+    for task in tasks:
+        if task["answer_kind"] == "short":
+            # Задание 18 has no numbers in the statement at all: the drawing is
+            # the data, so it is read rather than parsed. It comes first
+            # because every text rule would decline it anyway.
+            drawn = solve_squared_paper(task, IMAGES_DIR)
+            if drawn:
+                candidates.append((task, drawn))
+                continue
+            # The practical block asks about a text it does not repeat — the
+            # factory wheel is named once, in the shared block — so these two
+            # read the whole record rather than the statement alone.
+            scenario = solve_tyres(task) or solve_paper(task)
+            if scenario is not None:
+                candidates.append((task, answer_variants(scenario)))
+                continue
+            answer = (
+                solve_statement(task["statement_text"])
+                or solve_probability(task["statement_text"], task["short_id"])
+                or solve_equation(task["statement_text"], task["short_id"])
+                or solve_formula(task["statement_text"])
+                or solve_geometry(task["statement_text"], task["short_id"])
+                or solve_sequence(task["statement_text"], task["short_id"])
+                or solve_physics(task["statement_text"])
+            )
+            if answer is not None:
+                candidates.append((task, answer_variants(answer)))
+                continue
+            hinted = hints.get(task["guid"])
+            if hinted:
+                candidates.append((task, [variant for value in hinted for variant in answer_variants(value)]))
+            continue
+        if not args.choices:
+            continue
+        options = bounded_candidates(task.get("answer_space") or {})
+        if options:
+            candidates.append((task, options))
+
+    print(f"вычислено кандидатов: {len(candidates)}")
+
+    _confirm_candidates(candidates, args)
+
+
+def cmd_probe(args: argparse.Namespace) -> None:
+    """Recover free-numeric answers a solver could not compute, within bounds.
+
+    For the задачи whose answer type fixes its magnitude — a percentage, a
+    distance in single kilometres, a count of packets — the value is swept over
+    a tight per-type range and confirmed by ФИПИ, exactly as a computed answer
+    is. Only задачи with no key yet are touched, and a value already confirmed
+    or already refused is never re-sent. It stays deliberately narrow: a задача
+    whose answer runs to thousands of roubles, or lives only in a drawing, is
+    left for a reader that can work it out.
+    """
+    tasks = _load_tasks()
+    known = _confirmed_guids()
+
+    candidates: list[tuple[dict, list[str]]] = []
+    by_type: Counter[str] = Counter()
+    for task in tasks:
+        if task["answer_kind"] != "short" or task["guid"] in known:
+            continue
+        values = probe_candidates(task)
+        if not values:
+            continue
+        candidates.append((task, values))
+        by_type[probe_type(task["statement_text"]) or "?"] += 1
+
+    requests = sum(len(values) for _, values in candidates)
+    print(f"задач для перебора: {len(candidates)}, значений всего: {requests}")
+    for name, count in by_type.most_common():
+        print(f"  {name}: {count}")
+    if not candidates:
+        return
+
+    _confirm_candidates(candidates, args)
+
 
 def cmd_stats(args: argparse.Namespace) -> None:
     tasks = _load_tasks()
@@ -468,6 +525,12 @@ def build_parser() -> argparse.ArgumentParser:
     solve.add_argument("--choices", action="store_true", help="also walk tasks whose form offers a finite set of answers")
     solve.add_argument("--dry-run", action="store_true", help="show what would be sent, without contacting ФИПИ")
     solve.set_defaults(func=cmd_solve)
+
+    probe = sub.add_parser("probe", help="bounded guesses for free-numeric задачи, confirmed by ФИПИ")
+    probe.add_argument("--limit", type=int)
+    probe.add_argument("--refresh", action="store_true", help="ignore answers.jsonl and start over")
+    probe.add_argument("--dry-run", action="store_true", help="show what would be sent, without contacting ФИПИ")
+    probe.set_defaults(func=cmd_probe)
 
     hints = sub.add_parser("hints", help="look up candidate answers in an outside catalogue")
     hints.add_argument("--delay", type=float, default=1.2, help="seconds between requests")
