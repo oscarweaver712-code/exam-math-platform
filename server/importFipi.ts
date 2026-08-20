@@ -79,6 +79,8 @@ type ClassifiedTask = {
   /** Subset of `group_images` drawn inside the shared text. */
   group_inline_images?: string[];
   oge_number: number | null;
+  /** Pre-computed exam-position label, used directly when present (ЕГЭ). */
+  kim_number?: string;
   oge_title: string;
   url: string;
   classification: {
@@ -97,6 +99,8 @@ type Args = {
   tasksFile: string;
   imagesDir: string;
   answersFile: string;
+  trackSlug: string;
+  sourceTitle: string;
 };
 
 function parseArgs(argv: string[]): Args {
@@ -107,6 +111,8 @@ function parseArgs(argv: string[]): Args {
     tasksFile: DEFAULT_TASKS_FILE,
     imagesDir: DEFAULT_IMAGES_DIR,
     answersFile: DEFAULT_ANSWERS_FILE,
+    trackSlug: "oge-mathematics",
+    sourceTitle: "Открытый банк заданий ОГЭ, ФИПИ",
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--with-images") args.withImages = true;
@@ -114,6 +120,8 @@ function parseArgs(argv: string[]): Args {
     else if (argv[i] === "--tasks") args.tasksFile = argv[++i];
     else if (argv[i] === "--images") args.imagesDir = argv[++i];
     else if (argv[i] === "--answers") args.answersFile = argv[++i];
+    else if (argv[i] === "--track") args.trackSlug = argv[++i];
+    else if (argv[i] === "--source-title") args.sourceTitle = argv[++i];
     else if (argv[i] === "--status") {
       const value = argv[++i];
       if (value === "draft" || value === "review" || value === "published") args.status = value;
@@ -142,6 +150,7 @@ async function* readTasks(
 
 /** Which КИМ bucket a classified task belongs in. */
 function kimNumberFor(task: ClassifiedTask): string {
+  if (task.kim_number) return task.kim_number;
   if (task.oge_number !== null) return String(task.oge_number);
   const candidates = task.classification.candidates ?? [];
   const isPracticalBlock =
@@ -430,13 +439,15 @@ async function main() {
   }
 
   const [subject] = await db.select().from(subjects).where(eq(subjects.slug, SUBJECT_SLUG)).limit(1);
-  const [track] = await db.select().from(examTracks).where(eq(examTracks.slug, TRACK_SLUG)).limit(1);
+  const [track] = await db.select().from(examTracks).where(eq(examTracks.slug, args.trackSlug)).limit(1);
   if (!subject || !track) {
     console.error("Нет предмета или маршрута ОГЭ. Запустите приложение один раз, чтобы отработали сиды.");
     process.exit(1);
   }
 
-  await ensureBuckets(db, track.id);
+  // The ОГЭ bucket types (practical block, 23/25 pair) are specific to that
+  // track; other banks pre-seed their own types, so skip the auto-seed there.
+  if (args.trackSlug === "oge-mathematics") await ensureBuckets(db, track.id);
 
   const typeRows = await db
     .select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber })
@@ -490,7 +501,7 @@ async function main() {
         : null,
       answerKind: answerKindFor(task),
       sourceKind: "fipi" as const,
-      sourceTitle: "Открытый банк заданий ОГЭ, ФИПИ",
+      sourceTitle: args.sourceTitle,
       sourceUrl: task.url,
       sourceRecordId: task.guid,
       status: args.status,
