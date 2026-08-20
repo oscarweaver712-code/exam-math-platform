@@ -330,6 +330,7 @@ def _confirm_candidates(
                 }, ensure_ascii=False) + "\n")
                 handle.flush()
                 confirmed += 1
+                print(f"  ✓ {task['short_id']} = {accepted}", flush=True)
             else:
                 rejected += 1
                 if answered:
@@ -341,7 +342,7 @@ def _confirm_candidates(
                     refusals.flush()
 
             time.sleep(args.delay)
-            if index % 25 == 0:
+            if index % 10 == 0:
                 print(f"  {index}/{len(pending)} — подтверждено {confirmed}", flush=True)
 
     print(f"подтверждено {confirmed}, отклонено {rejected}, неясно {unclear} -> {ANSWERS_PATH}")
@@ -421,19 +422,23 @@ def cmd_probe(args: argparse.Namespace) -> None:
     tasks = _load_tasks()
     known = _confirmed_guids()
 
+    only = set(args.only.split(",")) if args.only else None
     candidates: list[tuple[dict, list[str]]] = []
     by_type: Counter[str] = Counter()
     for task in tasks:
         if task["answer_kind"] != "short" or task["guid"] in known:
             continue
+        kind = probe_type(task["statement_text"])
+        if only is not None and kind not in only:
+            continue
         values = probe_candidates(task)
         if not values:
             continue
         candidates.append((task, values))
-        by_type[probe_type(task["statement_text"]) or "?"] += 1
+        by_type[kind or "?"] += 1
 
     requests = sum(len(values) for _, values in candidates)
-    print(f"задач для перебора: {len(candidates)}, значений всего: {requests}")
+    print(f"задач для перебора: {len(candidates)}, значений всего: {requests}", flush=True)
     for name, count in by_type.most_common():
         print(f"  {name}: {count}")
     if not candidates:
@@ -529,6 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     probe = sub.add_parser("probe", help="bounded guesses for free-numeric задачи, confirmed by ФИПИ")
     probe.add_argument("--limit", type=int)
     probe.add_argument("--refresh", action="store_true", help="ignore answers.jsonl and start over")
+    probe.add_argument("--only", help="comma-separated answer types to sweep, e.g. km,distance_m,count,minutes,volume")
     probe.add_argument("--dry-run", action="store_true", help="show what would be sent, without contacting ФИПИ")
     probe.set_defaults(func=cmd_probe)
 
