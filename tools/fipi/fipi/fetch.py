@@ -51,7 +51,7 @@ class FipiClient:
         self._opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(self._jar)
         )
-        self._referer = f"{INDEX_URL}?proj={settings.proj}"
+        self._referer = f"{settings.index_url}?proj={settings.proj}"
         self._bootstrapped = False
 
     # -- low level ---------------------------------------------------------
@@ -81,7 +81,7 @@ class FipiClient:
     def _bootstrap(self) -> None:
         if self._bootstrapped:
             return
-        self._open(f"{INDEX_URL}?proj={self.settings.proj}", referer=INDEX_URL)
+        self._open(f"{self.settings.index_url}?proj={self.settings.proj}", referer=self.settings.index_url)
         self._bootstrapped = True
 
     # -- pages -------------------------------------------------------------
@@ -117,7 +117,7 @@ class FipiClient:
             return Page(index=index, html=path.read_text(encoding="utf-8"), from_cache=True)
 
         self._bootstrap()
-        raw = self._open(QUESTIONS_URL, data=self._payload(index))
+        raw = self._open(self.settings.questions_url, data=self._payload(index))
         html = raw.decode(ENCODING, errors="replace")
         path.write_text(html, encoding="utf-8")
         return Page(index=index, html=html, from_cache=False)
@@ -135,7 +135,7 @@ class FipiClient:
             return path.read_text(encoding="utf-8")
 
         self._bootstrap()
-        raw = self._open(QUESTIONS_URL, data=self._payload(0, zid=zid))
+        raw = self._open(self.settings.questions_url, data=self._payload(0, zid=zid))
         html = raw.decode(ENCODING, errors="replace")
         path.write_text(html, encoding="utf-8")
         time.sleep(self.settings.delay)
@@ -191,9 +191,9 @@ class FipiClient:
         parts.append(f"--{boundary}--\r\n")
         body = "".join(parts).encode("utf-8")
 
-        request = urllib.request.Request(SOLVE_URL, data=body)
+        request = urllib.request.Request(self.settings.solve_url, data=body)
         request.add_header("User-Agent", USER_AGENT)
-        request.add_header("Referer", QUESTIONS_URL)
+        request.add_header("Referer", self.settings.questions_url)
         request.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
         with self._opener.open(request, timeout=self.settings.timeout) as response:
             verdict = response.read().decode("ascii", errors="replace").strip()

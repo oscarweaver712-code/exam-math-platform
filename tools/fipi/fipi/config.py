@@ -132,9 +132,15 @@ KES_SECTIONS = {
 
 @dataclass
 class FetchSettings:
-    """Knobs for a crawl. Defaults are deliberately polite."""
+    """Knobs for a crawl. Defaults are deliberately polite.
+
+    `host` and `proj` together choose the bank: the ОГЭ math project on
+    `oge.fipi.ru` by default, or a ЕГЭ project on `ege.fipi.ru`. The endpoints
+    are derived so the same client crawls either — the engine is identical.
+    """
 
     proj: str = MATH_PROJ
+    host: str = HOST
     page_size: int = MAX_PAGE_SIZE
     #: Seconds to wait between page requests.
     delay: float = 1.5
@@ -142,3 +148,15 @@ class FetchSettings:
     retries: int = 3
     themes: tuple[str, ...] = field(default_factory=tuple)
     answer_kind: str = ""
+
+    @property
+    def index_url(self) -> str:
+        return f"{self.host}/bank/index.php"
+
+    @property
+    def questions_url(self) -> str:
+        return f"{self.host}/bank/questions.php"
+
+    @property
+    def solve_url(self) -> str:
+        return f"{self.host}/bank/solve.php"
