@@ -23,6 +23,7 @@ import { ExamTrackLanding, ExamTracks, SubjectCatalog } from "./pages/CatalogRou
 import Progress from "./pages/Progress";
 import AdminSolutions from "./pages/AdminSolutions";
 import AdminAnswers from "./pages/AdminAnswers";
+import AdminSort from "./pages/AdminSort";
 import { VariantDetail, Variants } from "./pages/Variants";
 import VariantSolve from "./pages/VariantSolve";
 import SettingsPage from "./pages/SettingsPage";
@@ -53,6 +54,7 @@ function Router() {
       <Route path={"/admin/tasks/control"} component={AdminTaskControl} />
       <Route path={"/admin/solutions"} component={AdminSolutions} />
       <Route path={"/admin/answers"} component={AdminAnswers} />
+      <Route path={"/admin/sort"} component={AdminSort} />
       <Route path={"/admin/access"} component={AdminAccess} />
       <Route path={"/admin/intake"} component={AdminIntake} />
       <Route path={"/admin/theory"} component={AdminTheory} />

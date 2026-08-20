@@ -62,6 +62,22 @@ async function getMathTrack() {
   return { db, ...track };
 }
 
+async function getMathTrackBySlug(trackSlug?: string) {
+  // Sorting works on any active math track; defaults to ОГЭ so nothing changes
+  // for the existing editor flows.
+  if (!trackSlug || trackSlug === "oge-mathematics") return getMathTrack();
+  await ensureOgeSeedData();
+  const db = await requireDb();
+  const [track] = await db
+    .select({ trackId: examTracks.id, subjectId: subjects.id })
+    .from(examTracks)
+    .innerJoin(subjects, eq(examTracks.subjectId, subjects.id))
+    .where(and(eq(examTracks.slug, trackSlug), eq(examTracks.isActive, true)))
+    .limit(1);
+  if (!track) throw new TRPCError({ code: "NOT_FOUND", message: "Экзаменационная траектория не найдена." });
+  return { db, ...track };
+}
+
 async function requireLearningRole(userId: number, role: "student" | "tutor") {
   const db = await requireDb();
   const [profile] = await db.select().from(platformProfiles).where(eq(platformProfiles.userId, userId)).limit(1);
@@ -950,6 +966,105 @@ export const schoolRouter = router({
           .where(eq(tasks.id, input.taskId));
 
         await recordTaskEvent(db, input.taskId, ctx.user.id, "updated", "Ответ введён редактором.");
+        return { taskId: input.taskId };
+      }),
+    /**
+     * Queue of tasks whose exam number is not settled — «unsorted», or a joint
+     * bucket like «1/14/16» that the classifier could not split. The editor
+     * gives each one a concrete number. Works on any track (ЕГЭ base leaves the
+     * most here); ОГЭ can use it too.
+     */
+    sortQueue: adminProcedure
+      .input(
+        z.object({
+          trackSlug: z.string().optional(),
+          kimNumber: z.string().trim().max(24).optional(),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(6).max(48).default(20),
+        }),
+      )
+      .query(async ({ input }) => {
+        const { db, trackId } = await getMathTrackBySlug(input.trackSlug);
+        // «Unsettled» = the assigned type is «unsorted» or a joint bucket
+        // (its kimNumber carries a slash), never a clean single number.
+        const unsettled = sql`(${examTaskTypes.kimNumber} = 'unsorted' OR ${examTaskTypes.kimNumber} LIKE '%/%')`;
+        const filters = [eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt), unsettled];
+        if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
+
+        const [rows, [counted], numberedTypes, buckets] = await Promise.all([
+          db
+            .select({
+              taskId: tasks.id,
+              slug: tasks.slug,
+              statementMarkdown: tasks.statementMarkdown,
+              kimNumber: examTaskTypes.kimNumber,
+              taskType: examTaskTypes.title,
+            })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters))
+            .orderBy(asc(tasks.id))
+            .limit(input.pageSize)
+            .offset((input.page - 1) * input.pageSize),
+          db
+            .select({ total: sql<number>`count(${tasks.id})` })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters)),
+          // Single-number types of this track, for the assign dropdown.
+          db
+            .select({ kimNumber: examTaskTypes.kimNumber, title: examTaskTypes.title, part: examTaskTypes.part })
+            .from(examTaskTypes)
+            .where(and(eq(examTaskTypes.examTrackId, trackId), sql`${examTaskTypes.kimNumber} REGEXP '^[0-9]+$'`))
+            .orderBy(asc(examTaskTypes.sortOrder)),
+          // How many wait in each bucket, for the filter.
+          db
+            .select({ kimNumber: examTaskTypes.kimNumber, total: sql<number>`count(${tasks.id})` })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt), unsettled))
+            .groupBy(examTaskTypes.kimNumber, examTaskTypes.sortOrder)
+            .orderBy(asc(examTaskTypes.sortOrder)),
+        ]);
+
+        const total = Number(counted?.total ?? 0);
+        return {
+          items: rows,
+          numberedTypes,
+          buckets: buckets.map(b => ({ kimNumber: b.kimNumber, total: Number(b.total) })),
+          total,
+          page: input.page,
+          pageSize: input.pageSize,
+          pageCount: Math.max(1, Math.ceil(total / input.pageSize)),
+          waiting: buckets.reduce((sum, b) => sum + Number(b.total), 0),
+        };
+      }),
+    /**
+     * Move a task to a concrete exam number — the only column it touches is
+     * `examTaskTypeId`, exactly as `saveAnswer` touches only the key.
+     */
+    assignNumber: adminProcedure
+      .input(z.object({ taskId: z.number().int().positive(), kimNumber: z.string().trim().min(1).max(24), trackSlug: z.string().optional() }))
+      .mutation(async ({ ctx, input }) => {
+        const { db, trackId } = await getMathTrackBySlug(input.trackSlug);
+        const [type] = await db
+          .select({ id: examTaskTypes.id })
+          .from(examTaskTypes)
+          .where(and(eq(examTaskTypes.examTrackId, trackId), eq(examTaskTypes.kimNumber, input.kimNumber)))
+          .limit(1);
+        if (!type) throw new TRPCError({ code: "BAD_REQUEST", message: "Нет такого номера в этом треке." });
+        const [task] = await db
+          .select({ id: tasks.id, contentVersion: tasks.contentVersion })
+          .from(tasks)
+          .where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt)))
+          .limit(1);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+        const timestamp = Date.now();
+        await db
+          .update(tasks)
+          .set({ examTaskTypeId: type.id, contentVersion: task.contentVersion + 1, updatedAt: timestamp })
+          .where(eq(tasks.id, input.taskId));
+        await recordTaskEvent(db, input.taskId, ctx.user.id, "updated", `Номер задания уточнён: № ${input.kimNumber}.`);
         return { taskId: input.taskId };
       }),
     archiveTask: adminProcedure.input(taskLifecycleInput).mutation(async ({ ctx, input }) => {
