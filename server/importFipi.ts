@@ -449,6 +449,17 @@ async function main() {
   // track; other banks pre-seed their own types, so skip the auto-seed there.
   if (args.trackSlug === "oge-mathematics") await ensureBuckets(db, track.id);
 
+  // short_id is unique only within one bank, but internalId and slug are
+  // globally unique — so an ЕГЭ task sharing a short_id with an ОГЭ one would
+  // collide. Namespace both by track. ОГЭ keeps its original scheme so its
+  // existing rows stay stable across re-imports.
+  const trackCode = args.trackSlug === "oge-mathematics" ? "OGE" : "EGE";
+  const slugFor = (shortId: string) =>
+    trackCode === "OGE"
+      ? `fipi-${shortId.toLowerCase()}`
+      : `fipi-${trackCode.toLowerCase()}-${shortId.toLowerCase()}`;
+  const internalIdFor = (shortId: string) => `SH911-${trackCode}-FIPI-${shortId.toUpperCase()}`;
+
   const typeRows = await db
     .select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber })
     .from(examTaskTypes)
@@ -530,8 +541,8 @@ async function main() {
         ...shared,
         correctAnswer: key,
         solutionMarkdown: SOLUTION_PLACEHOLDER,
-        slug: `fipi-${task.short_id.toLowerCase()}`,
-        internalId: `SH911-OGE-FIPI-${task.short_id.toUpperCase()}`,
+        slug: slugFor(task.short_id),
+        internalId: internalIdFor(task.short_id),
         catalogNumber,
         sourceAccessedAt: timestamp,
         contentVersion: 1,
