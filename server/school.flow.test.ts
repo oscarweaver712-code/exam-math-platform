@@ -232,6 +232,8 @@ describe("public bank and tutor homework flow", () => {
     const studentCaller = appRouter.createCaller(createContext(testUser(studentId, openId, `${suffix}-role@student.example.test`, "Тестовый ученик")));
     await expect(studentCaller.school.tutor.students()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.tasks()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.answerQueue({})).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(studentCaller.school.admin.saveAnswer({ taskId: 1, correctAnswer: "12" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.theory()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.getTheory({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(studentCaller.school.admin.theoryVersions({ theoryUnitId: 1 })).rejects.toMatchObject({ code: "FORBIDDEN" });

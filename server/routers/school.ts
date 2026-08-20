@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { SOLUTION_PLACEHOLDER, isSolutionMissing } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
@@ -558,6 +558,7 @@ export const schoolRouter = router({
           solutionMarkdown: tasks.solutionMarkdown,
           answerKind: tasks.answerKind,
           correctAnswer: tasks.correctAnswer,
+          acceptableAnswers: tasks.acceptableAnswers,
           status: tasks.status,
           sourceKind: tasks.sourceKind,
           sourceTitle: tasks.sourceTitle,
@@ -816,6 +817,140 @@ export const schoolRouter = router({
         }
         await recordTaskEvent(db, input.taskId, ctx.user.id, "updated", "Разбор написан или обновлён.");
         return { taskId: input.taskId, steps: input.steps.length, hints: input.hints.length };
+      }),
+    /**
+     * Queue of Part 1 задачи that still have no answer key.
+     *
+     * Most of the bank got its key from the offline solver, confirmed by ФИПИ.
+     * What is left needs a человек to read the drawing — a plan, a graph, an
+     * arc — and type the answer. This lists exactly those: auto-checkable
+     * задачи (a развёрнутый ответ has no key to check) with the column empty.
+     */
+    answerQueue: adminProcedure
+      .input(
+        z.object({
+          kimNumber: z.string().trim().max(16).optional(),
+          onlyMissing: z.boolean().default(true),
+          page: z.number().int().min(1).default(1),
+          pageSize: z.number().int().min(6).max(48).default(20),
+        }),
+      )
+      .query(async ({ input }) => {
+        const { db, trackId } = await getMathTrack();
+        // A развёрнутый ответ (manual) has nothing to check against, so it is
+        // never part of this queue; only задачи the grader can mark belong.
+        const checkable = ne(tasks.answerKind, "manual");
+        const missing = sql`${tasks.correctAnswer} IS NULL OR ${tasks.correctAnswer} = ''`;
+        const filters = [
+          eq(tasks.examTrackId, trackId),
+          isNull(tasks.deletedAt),
+          eq(examTaskTypes.part, "part1"),
+          checkable,
+        ];
+        if (input.kimNumber) filters.push(eq(examTaskTypes.kimNumber, input.kimNumber));
+        if (input.onlyMissing) filters.push(missing);
+
+        const [rows, [counted], byNumber] = await Promise.all([
+          db
+            .select({
+              taskId: tasks.id,
+              catalogNumber: tasks.catalogNumber,
+              title: tasks.title,
+              slug: tasks.slug,
+              statementMarkdown: tasks.statementMarkdown,
+              correctAnswer: tasks.correctAnswer,
+              answerKind: tasks.answerKind,
+              kimNumber: examTaskTypes.kimNumber,
+              taskType: examTaskTypes.title,
+            })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters))
+            .orderBy(asc(examTaskTypes.sortOrder), asc(tasks.catalogNumber))
+            .limit(input.pageSize)
+            .offset((input.page - 1) * input.pageSize),
+          db
+            .select({ total: sql<number>`count(${tasks.id})` })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(and(...filters)),
+          db
+            .select({
+              kimNumber: examTaskTypes.kimNumber,
+              waiting: sql<number>`SUM(CASE WHEN ${tasks.correctAnswer} IS NULL OR ${tasks.correctAnswer} = '' THEN 1 ELSE 0 END)`,
+              total: sql<number>`count(${tasks.id})`,
+            })
+            .from(tasks)
+            .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
+            .where(
+              and(
+                eq(tasks.examTrackId, trackId),
+                isNull(tasks.deletedAt),
+                eq(examTaskTypes.part, "part1"),
+                checkable,
+              ),
+            )
+            .groupBy(examTaskTypes.kimNumber, examTaskTypes.sortOrder)
+            .orderBy(asc(examTaskTypes.sortOrder)),
+        ]);
+
+        const total = Number(counted?.total ?? 0);
+        return {
+          items: rows.map(row => ({ ...row, hasKey: Boolean(row.correctAnswer?.trim()) })),
+          total,
+          page: input.page,
+          pageSize: input.pageSize,
+          pageCount: Math.max(1, Math.ceil(total / input.pageSize)),
+          waiting: byNumber.reduce((sum, row) => sum + Number(row.waiting), 0),
+          keyed: byNumber.reduce((sum, row) => sum + (Number(row.total) - Number(row.waiting)), 0),
+        };
+      }),
+    /**
+     * Writes an answer key and nothing else — the twin of `saveSolution`.
+     *
+     * `updateTask` would demand a topic, a slug and a source year the ФИПИ bank
+     * never carried, and would rewrite the statement on the way past. Here an
+     * editor reads the drawing and types the answer; the grader in
+     * `checkPartOneAnswer` then marks students against it, no differently from
+     * a key the offline solver confirmed. Acceptable variants cover the few
+     * задачи that accept more than one spelling.
+     */
+    saveAnswer: adminProcedure
+      .input(
+        z.object({
+          taskId: z.number().int().positive(),
+          correctAnswer: z.string().trim().min(1).max(1024),
+          acceptableAnswers: z.array(z.string().trim().min(1).max(1024)).max(10).default([]),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { db, trackId } = await getMathTrack();
+        const [task] = await db
+          .select({ id: tasks.id, contentVersion: tasks.contentVersion, answerKind: tasks.answerKind })
+          .from(tasks)
+          .where(and(eq(tasks.id, input.taskId), eq(tasks.examTrackId, trackId), isNull(tasks.deletedAt)))
+          .limit(1);
+        if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задача не найдена." });
+        if (task.answerKind === "manual") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "У задачи развёрнутый ответ — автопроверять нечего.",
+          });
+        }
+
+        const timestamp = Date.now();
+        await db
+          .update(tasks)
+          .set({
+            correctAnswer: input.correctAnswer,
+            acceptableAnswers: input.acceptableAnswers,
+            contentVersion: task.contentVersion + 1,
+            updatedAt: timestamp,
+          })
+          .where(eq(tasks.id, input.taskId));
+
+        await recordTaskEvent(db, input.taskId, ctx.user.id, "updated", "Ответ введён редактором.");
+        return { taskId: input.taskId };
       }),
     archiveTask: adminProcedure.input(taskLifecycleInput).mutation(async ({ ctx, input }) => {
       const { db, trackId } = await getMathTrack();

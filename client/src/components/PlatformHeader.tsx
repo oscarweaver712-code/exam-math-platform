@@ -3,7 +3,7 @@ import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { trpc } from "@/lib/trpc";
-import { BookOpenCheck, ChartNoAxesColumnIncreasing, ClipboardList, ClipboardPlus, Compass, FileCheck2, Home, Image, Inbox, Library, Menu, Moon, PencilLine, Settings, ShieldCheck, SlidersHorizontal, Sun } from "lucide-react";
+import { BookOpenCheck, ChartNoAxesColumnIncreasing, ClipboardList, ClipboardPlus, Compass, FileCheck2, Home, Image, Inbox, Library, Menu, Moon, PencilLine, Settings, ShieldCheck, SlidersHorizontal, Sun, KeyRound } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -19,6 +19,7 @@ const primaryLinks = [
 const adminLinks = [
   { href: "/admin/tasks/control", label: "Проверка задач", icon: SlidersHorizontal },
   { href: "/admin/solutions", label: "Разборы", icon: PencilLine },
+  { href: "/admin/answers", label: "Ответы", icon: KeyRound },
   { href: "/admin/tasks", label: "Материалы", icon: FileCheck2 },
   { href: "/admin/intake", label: "Импорт", icon: Inbox },
   { href: "/admin/theory", label: "Теория", icon: Library },
