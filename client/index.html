@@ -11,6 +11,21 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script defer src="%VITE_ANALYTICS_ENDPOINT%/umami" data-website-id="%VITE_ANALYTICS_WEBSITE_ID%"></script>
+    <script>
+      // Load the umami tag only when the analytics endpoint is actually
+      // configured. Unset, Vite leaves the literal «%VITE_ANALYTICS_ENDPOINT%»,
+      // and the browser fired a 502 for «/%VITE_ANALYTICS_ENDPOINT%/umami» on
+      // every page. Guard on the leftover percent sign.
+      (function () {
+        var endpoint = "%VITE_ANALYTICS_ENDPOINT%";
+        var website = "%VITE_ANALYTICS_WEBSITE_ID%";
+        if (endpoint.charAt(0) === "%") return;
+        var s = document.createElement("script");
+        s.defer = true;
+        s.src = endpoint + "/umami";
+        s.setAttribute("data-website-id", website);
+        document.head.appendChild(s);
+      })();
+    </script>
   </body>
 </html>

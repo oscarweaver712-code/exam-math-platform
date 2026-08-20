@@ -23,7 +23,9 @@ export default function TaskDetail() {
   const [showSolution, setShowSolution] = useState(false);
   const [revealedHints, setRevealedHints] = useState(0);
   const [revealedSteps, setRevealedSteps] = useState(0);
-  const result = learningCheck.data ?? guestCheck.data;
+  // A fresh check wins; otherwise fall back to what the learner did before, so
+  // reopening a solved задача shows «Верный ответ» instead of an empty form.
+  const result = learningCheck.data ?? guestCheck.data ?? task.data?.attempt ?? undefined;
   const submit = () => { if (!task.data || !answer.trim()) return; if (isAuthenticated) learningCheck.mutate({ taskId: task.data.id, rawAnswer: answer }); else guestCheck.mutate({ taskId: task.data.id, rawAnswer: answer }); };
   const openSolution = () => { const next = !showSolution; setShowSolution(next); if (next) setRevealedSteps(0); };
 

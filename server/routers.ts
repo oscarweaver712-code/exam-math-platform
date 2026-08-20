@@ -334,7 +334,7 @@ export const appRouter = router({
       ]);
       return { materials, visuals };
     }),
-    getTask: protectedProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ input }) => {
+    getTask: protectedProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ ctx, input }) => {
       const track = await getOgeTrack();
       const db = await requireDb();
       const [task] = await db
@@ -378,7 +378,29 @@ export const appRouter = router({
         db.select({ id: taskHints.id, title: taskHints.title, bodyMarkdown: taskHints.bodyMarkdown, sortOrder: taskHints.sortOrder }).from(taskHints).where(eq(taskHints.taskId, task.id)).orderBy(asc(taskHints.sortOrder)),
         db.select({ id: taskSolutionSteps.id, title: taskSolutionSteps.title, bodyMarkdown: taskSolutionSteps.bodyMarkdown, sortOrder: taskSolutionSteps.sortOrder }).from(taskSolutionSteps).where(eq(taskSolutionSteps.taskId, task.id)).orderBy(asc(taskSolutionSteps.sortOrder)),
       ]);
-      return { ...task, catalogNumber: task.catalogNumber!, relatedTheory, visuals, hints, solutionSteps };
+      // The learner's own history with this задача, so reopening it shows what
+      // they already did instead of a blank form. A correct attempt wins over a
+      // later wrong one — «решено» should stick the way the bank list shows it.
+      const [attempt] = await db
+        .select({ rawAnswer: taskAttempts.rawAnswer, checkStatus: taskAttempts.checkStatus, isCorrect: taskAttempts.isCorrect })
+        .from(taskAttempts)
+        .where(and(eq(taskAttempts.userId, ctx.user.id), eq(taskAttempts.taskId, task.id)))
+        .orderBy(desc(taskAttempts.isCorrect), desc(taskAttempts.submittedAt))
+        .limit(1);
+      const priorAttempt = attempt
+        ? {
+            rawAnswer: attempt.rawAnswer,
+            checkStatus: attempt.checkStatus,
+            isCorrect: attempt.isCorrect,
+            feedback:
+              attempt.checkStatus === "correct"
+                ? "Верно. Ответ засчитан."
+                : attempt.checkStatus === "awaiting_review"
+                  ? "Ответ отправлен на проверку преподавателю."
+                  : "Пока неверно. Проверьте ход решения и попробуйте ещё раз.",
+          }
+        : null;
+      return { ...task, catalogNumber: task.catalogNumber!, relatedTheory, visuals, hints, solutionSteps, attempt: priorAttempt };
     }),
     checkAnswer: protectedProcedure
       .input(z.object({ taskId: z.number().int().positive(), rawAnswer: z.string().min(1).max(1024) }))
