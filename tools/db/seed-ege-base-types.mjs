@@ -43,6 +43,18 @@ const POSITIONS = [
   [21, "Задача на смекалку"],
 ];
 
+// Named buckets for families the open bank can't split into an exact number —
+// several base positions share one template («Найдите значение выражения» is
+// tasks 1, 14 and 16). Like ОГЭ's 23/25 pair, they live under an honest joint
+// label instead of a number nobody (classifier or editor) can assign.
+const BUCKETS = [
+  ["1/2", "Практическая арифметика (№ 1/2)", 1],
+  ["1/14/16", "Вычисления (№ 1/14/16)", 14],
+  ["4/20/21", "Текстовые задачи (№ 4/20/21)", 20],
+  ["9/10/12", "Планиметрия (№ 9/10/12)", 10],
+  ["11/13", "Стереометрия (№ 11/13)", 12],
+];
+
 async function main() {
   const mysql = await loadMysql();
   const db = await mysql.createConnection(process.env.DATABASE_URL);
@@ -57,6 +69,11 @@ async function main() {
   for (const [n, title] of POSITIONS) {
     if (known.has(String(n))) continue;
     rows.push([track.id, String(n), title, "part1", n, `ЕГЭ базовый, задание № ${n}.`, now]);
+  }
+  for (const [kimNumber, title, sortOrder] of BUCKETS) {
+    if (known.has(kimNumber)) continue;
+    rows.push([track.id, kimNumber, title, "part1", sortOrder,
+      "Открытый банк ФИПИ не хранит номер задания: несколько позиций базового используют одну формулировку. Как пара 23/25 в ОГЭ, они собраны под честной меткой.", now]);
   }
   if (!known.has("unsorted")) {
     rows.push([track.id, "unsorted", "Неотсортировано — номер уточняется", "part1", 99,
