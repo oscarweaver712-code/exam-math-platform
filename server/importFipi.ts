@@ -453,12 +453,20 @@ async function main() {
   // globally unique — so an ЕГЭ task sharing a short_id with an ОГЭ one would
   // collide. Namespace both by track. ОГЭ keeps its original scheme so its
   // existing rows stay stable across re-imports.
+  // short_id is not even unique inside the ЕГЭ bank (a handful of tasks share
+  // one), and it collides with ОГЭ across banks, while internalId and slug are
+  // globally unique. The guid is the only globally-unique handle, so ЕГЭ slugs
+  // and ids carry a guid prefix. ОГЭ keeps its original short_id scheme so its
+  // existing rows stay stable across re-imports.
   const trackCode = args.trackSlug === "oge-mathematics" ? "OGE" : "EGE";
-  const slugFor = (shortId: string) =>
+  const slugFor = (task: ClassifiedTask) =>
     trackCode === "OGE"
-      ? `fipi-${shortId.toLowerCase()}`
-      : `fipi-${trackCode.toLowerCase()}-${shortId.toLowerCase()}`;
-  const internalIdFor = (shortId: string) => `SH911-${trackCode}-FIPI-${shortId.toUpperCase()}`;
+      ? `fipi-${task.short_id.toLowerCase()}`
+      : `fipi-ege-${task.short_id.toLowerCase()}-${task.guid.slice(0, 8).toLowerCase()}`;
+  const internalIdFor = (task: ClassifiedTask) =>
+    trackCode === "OGE"
+      ? `SH911-OGE-FIPI-${task.short_id.toUpperCase()}`
+      : `SH911-EGE-FIPI-${task.short_id.toUpperCase()}-${task.guid.slice(0, 8).toUpperCase()}`;
 
   const typeRows = await db
     .select({ id: examTaskTypes.id, kimNumber: examTaskTypes.kimNumber })
@@ -541,8 +549,8 @@ async function main() {
         ...shared,
         correctAnswer: key,
         solutionMarkdown: SOLUTION_PLACEHOLDER,
-        slug: slugFor(task.short_id),
-        internalId: internalIdFor(task.short_id),
+        slug: slugFor(task),
+        internalId: internalIdFor(task),
         catalogNumber,
         sourceAccessedAt: timestamp,
         contentVersion: 1,
