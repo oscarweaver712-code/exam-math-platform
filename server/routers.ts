@@ -54,6 +54,8 @@ const SHARED_INTRO_TITLE = "Общее условие";
 const LIVE_ORACLE = process.env.FIPI_ORACLE === "1";
 
 const publicFilters = z.object({
+  /** Which exam track to serve; defaults to ОГЭ. */
+  trackSlug: z.string().optional(),
   topicSlug: z.string().optional(),
   kimNumber: z.string().optional(),
   part: z.enum(["part1", "part2"]).optional(),
@@ -88,6 +90,22 @@ async function getOgeTrack() {
     .where(and(eq(examTracks.slug, "oge-mathematics"), eq(examTracks.isActive, true)))
     .limit(1);
   if (!track) throw new TRPCError({ code: "NOT_FOUND", message: "Траектория ОГЭ по математике не найдена." });
+  return track;
+}
+
+async function getTrackBySlug(trackSlug?: string) {
+  // The public bank defaults to ОГЭ; a trackSlug switches it to another active
+  // track (ЕГЭ) without changing the ОГЭ path. Same shape as getOgeTrack.
+  if (!trackSlug || trackSlug === "oge-mathematics") return getOgeTrack();
+  await ensureOgeSeedData();
+  const db = await requireDb();
+  const [track] = await db
+    .select({ id: examTracks.id, slug: examTracks.slug, title: examTracks.title, subjectId: subjects.id, subjectSlug: subjects.slug, subjectTitle: subjects.title })
+    .from(examTracks)
+    .innerJoin(subjects, eq(examTracks.subjectId, subjects.id))
+    .where(and(eq(examTracks.slug, trackSlug), eq(examTracks.isActive, true)))
+    .limit(1);
+  if (!track) throw new TRPCError({ code: "NOT_FOUND", message: "Экзаменационная траектория не найдена." });
   return track;
 }
 
@@ -143,8 +161,8 @@ export const appRouter = router({
   // публичным: он отдаёт только счётчики и названия тем для витрины,
   // а сами условия, разборы и проверка ответов требуют входа.
   publicBank: router({
-    overview: publicProcedure.query(async () => {
-      const track = await getOgeTrack();
+    overview: publicProcedure.input(z.object({ trackSlug: z.string().optional() }).optional()).query(async ({ input }) => {
+      const track = await getTrackBySlug(input?.trackSlug);
       const db = await requireDb();
       const topicRows = await db
         .select({ slug: curriculumUnits.slug, title: curriculumUnits.title, description: curriculumUnits.description })
@@ -207,7 +225,7 @@ export const appRouter = router({
       const track = await getOgeTrack(); return buildEphemeralVariant(await requireDb(), track.id, input.entropy);
     }),
     listTasks: protectedProcedure.input(publicFilters).query(async ({ ctx, input }) => {
-      const track = await getOgeTrack();
+      const track = await getTrackBySlug(input.trackSlug);
       const db = await requireDb();
       const filters = [eq(tasks.examTrackId, track.id), eq(tasks.status, "published")];
       if (input.topicSlug) filters.push(eq(curriculumUnits.slug, input.topicSlug));
@@ -335,7 +353,9 @@ export const appRouter = router({
       return { materials, visuals };
     }),
     getTask: protectedProcedure.input(z.object({ slug: z.string().min(1) })).query(async ({ ctx, input }) => {
-      const track = await getOgeTrack();
+      // Resolved by slug across tracks: ОГЭ uses `fipi-…`, ЕГЭ `fipi-ege-…`,
+      // author tasks their own — none collide, so the track need not be named.
+      await ensureOgeSeedData();
       const db = await requireDb();
       const [task] = await db
         .select({
@@ -361,7 +381,7 @@ export const appRouter = router({
         .innerJoin(examTaskTypes, eq(tasks.examTaskTypeId, examTaskTypes.id))
         .leftJoin(taskCurriculumUnits, eq(tasks.id, taskCurriculumUnits.taskId))
         .leftJoin(curriculumUnits, eq(taskCurriculumUnits.curriculumUnitId, curriculumUnits.id))
-        .where(and(eq(tasks.examTrackId, track.id), eq(tasks.slug, input.slug), eq(tasks.status, "published")))
+        .where(and(eq(tasks.slug, input.slug), eq(tasks.status, "published")))
         .limit(1);
       if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Задание не найдено." });
       const relatedTheory = await db
