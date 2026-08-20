@@ -48,6 +48,7 @@ IMAGES_DIR = OUT / "images"
 def _settings(args: argparse.Namespace) -> FetchSettings:
     return FetchSettings(
         proj=args.proj,
+        host=getattr(args, "host", HOST),
         page_size=args.page_size,
         delay=args.delay,
         themes=tuple(t for t in (args.theme or "").split(",") if t),
@@ -499,6 +500,7 @@ def cmd_verify(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="fipi", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--host", default=HOST, help="bank host, e.g. https://ege.fipi.ru")
     parser.add_argument("--proj", default=MATH_PROJ, help="subject project GUID")
     parser.add_argument("--page-size", type=int, default=MAX_PAGE_SIZE)
     parser.add_argument("--delay", type=float, default=1.5, help="seconds between live requests")

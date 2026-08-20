@@ -119,6 +119,9 @@ client/public/__manus__/version.json
 # them. `tools/fipi/README.md` explains how to rebuild it in ten minutes.
 tools/fipi/cache/
 tools/fipi/out/*
+tools/fipi/cache-ege-base/
+tools/fipi/out-ege-base/*
+!tools/fipi/out-ege-base/answers.jsonl
 # ...кроме подтверждённых ключей. Это не материал ФИПИ, а наша работа:
 # ответы вычислены нами и подтверждены их проверкой. Восстановить их можно
 # только повторив весь прогон, поэтому они живут в репозитории.
